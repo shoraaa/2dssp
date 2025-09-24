@@ -1,0 +1,203 @@
+% !TEX program = pdflatex
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{mathtools}
+\usepackage{booktabs}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{microtype}
+\usepackage{hyperref}
+\hypersetup{colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\setlist[itemize]{noitemsep,topsep=2pt}
+\setlist[enumerate]{noitemsep,topsep=2pt}
+
+\title{A 2D Shortest Superstring (Tile Canvas) Problem: \newline Exact Models and an Ant Colony Optimization Heuristic}
+\author{Tran Thanh Dat}
+\date{\today}
+
+\newcommand{\bbR}{\mathbb{R}}
+\newcommand{\bbZ}{\mathbb{Z}}
+\newcommand{\indic}{\mathbf{1}}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We study a 2D analogue of the Shortest Superstring problem. Given a set of $T$ square tiles of size $n\times n$ over a finite alphabet, the task is to place one translated copy of each tile on an integer grid so that overlapping cells agree and the side length $m$ of the bounding canvas is minimized. We present: (i) a precise problem statement; (ii) an exact Mixed-Integer Linear Programming (MILP) model solved iteratively over $m$; (iii) a complete brute-force backtracking oracle for small instances; and (iv) a practical Ant Colony Optimization (ACO) heuristic with sparse pheromones, overlap-based heuristics, and compactness bias. The formulations match the provided construction paradigm (edges encode relative placements), and the ACO is designed to scale for $n<10$ and moderate $T$.
+\end{abstract}
+
+\section{Problem definition}
+Let $\mathcal{T}=\{1,\dots,T\}$ be tile indices. Each tile $t\in\mathcal{T}$ is an array $A^{(t)}\in\Sigma^{n\times n}$ over a finite alphabet $\Sigma$ (e.g., $\{0,1\}$). A placement assigns to each tile $t$ an integer top-left offset $p_t=(x_t,y_t)\in\bbZ^2$. The induced canvas labeling is
+\[
+C(X,Y) \;=\; A^{(t)}(X-x_t,\,Y-y_t) \quad \text{for any $(X,Y)$ covered by tile $t$},
+\]
+which must be \emph{well-defined}: whenever two tiles cover the same cell, they must agree: $A^{(u)}(i,j)=A^{(v)}(i+\Delta x, j+\Delta y)$ for all overlapping indices. The (axis-aligned) bounding box of a placement is
+\[
+[X_{\min},X_{\max}]\times[Y_{\min},Y_{\max}] \;\text{ where }\; X_{\min}=\min_t x_t,\; X_{\max}=\max_t(x_t+n-1),\; \text{etc.}
+\]
+We define the \emph{canvas side} $m=\max\{X_{\max}-X_{\min}+1,\;Y_{\max}-Y_{\min}+1\}$, and aim to minimize $m$.
+
+\paragraph{Decision} Given $m\in\bbZ_{\ge n}$, does there exist a conflict-free placement with bounding square contained in $[0,m-1]^2$? The optimization task is to find the minimal feasible $m$.
+
+\section{Exact models}
+\subsection{Iterative MILP feasibility (Gurobi)}
+For a fixed $m$, each tile must be placed at a top-left integer coordinate $(x,y)\in\{0,\dots,m-n\}^2$. Introduce binary variables
+\[
+ p_{txy} = \begin{cases}1 & \text{if tile $t$ is placed at $(x,y)$},\\ 0 & \text{otherwise.}\end{cases}
+\]
+\paragraph{Assignment constraints} Each tile placed exactly once:
+\begin{equation}
+\sum_{x=0}^{m-n}\sum_{y=0}^{m-n} p_{txy} = 1\quad \forall t\in\mathcal{T}. \label{eq:assign}
+\end{equation}
+\paragraph{Pairwise conflict constraints} For any two tiles $u<v$ and placements $(x,y)$, $(x',y')$, if the two translated tiles overlap at any cell with different symbols, forbid selecting both:
+\begin{equation}
+ p_{uxy} + p_{vx'y'} \le 1 \quad \text{for all conflicting pairs.} \label{eq:conflict}
+\end{equation}
+Conflicts are precomputed in $O(n^2)$ per pair of placements by checking the intersection of their $n\times n$ supports.
+
+The model has $T\cdot(m-n+1)^2$ binaries. We iterate $m=n,n+1,\ldots,\bar m$ (with a simple upper bound like $\bar m = n\lceil\sqrt{T}\rceil$) and solve~\eqref{eq:assign}--\eqref{eq:conflict} for feasibility. The first feasible $m$ is optimal.
+
+\subsection{Brute-force backtracking oracle}
+For small $n$ and moderate $T$, an exact search over placements is practical. For each $m$ from $n$ upward:
+\begin{enumerate}[label=(\roman*)]
+  \item Enumerate the domain $\{0,\dots,m-n\}^2$ for every tile.
+  \item Backtrack with MRV (place the tile with the fewest currently feasible positions), using a hash-based occupancy to test conflicts in $O(n^2)$ per attempt.
+  \item Order candidate positions by descending current overlap with the partial canvas to find solutions quickly.
+\end{enumerate}
+This exactly matches the feasibility decision and returns optimal $m$ at the first success.
+
+\begin{algorithm}[H]
+\caption{Greedy Overlap Insertion (GOI)}
+\begin{algorithmic}[1]
+\Require Tiles $\mathcal{T}$ ($n\times n$), TopK feasible offsets with $ov>0$
+\State $L \gets \{(r,0,0)\}$; $P\gets\{r\}$; $U\gets\mathcal{T}\setminus\{r\}$; init $\mathsf{BBox}$
+\While{$U\neq\emptyset$}
+  \State $\mathsf{Best}\gets\text{None}$
+  \ForAll{$v\in U$}
+     \State $\mathcal{C}_v \gets \{(x_u+dx, y_u+dy)\}$ from $u\in P$, $(dx,dy)\in\text{TopK}(u,v)$
+     \If{$\mathcal{C}_v=\emptyset$} add perimeter candidates \EndIf
+     \ForAll{$(x,y)\in\mathcal{C}_v$}
+        \If{placing $v$ at $(x,y)$ is conflict-free}
+           \State $H \gets \sum_{u\in P} ov\big(u,v,x-x_u,y-y_u\big)$
+           \State $\Delta m \gets$ enlargement if $v$ placed at $(x,y)$
+           \State update $\mathsf{Best}$ by max $H$, tie-break min $\Delta m$
+        \EndIf
+     \EndFor
+  \EndFor
+  \If{$\mathsf{Best}=\text{None}$} \textbf{break} \EndIf
+  \State place $\mathsf{Best}$ into $L$; update $\mathsf{BBox}$; move $v^*$ from $U$ to $P$
+\EndWhile
+\State \Return $L$, $m(L)$
+\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}[H]
+\caption{Greedy Lowest Enlargement Insertion (GLEI)}
+\begin{algorithmic}[1]
+\Require Same inputs as GOI
+\State init $L$, $P$, $U$, $\mathsf{BBox}$ as before
+\While{$U\neq\emptyset$}
+  \State $\mathsf{Best}\gets\text{None}$
+  \ForAll{$v\in U$}
+     \State build $\mathcal{C}_v$ as in GOI (TopK + perimeter if needed)
+     \ForAll{$(x,y)\in\mathcal{C}_v$}
+        \If{conflict-free}
+           \State $\Delta m \gets$ enlargement of canvas side
+           \State $H \gets \sum_{u\in P} ov(u,v,x-x_u,y-y_u)$
+           \State update $\mathsf{Best}$ by min $\Delta m$, tie-break max $H$
+        \EndIf
+     \EndFor
+  \EndFor
+  \If{$\mathsf{Best}=\text{None}$} \textbf{break} \EndIf
+  \State place $\mathsf{Best}$; update $\mathsf{BBox}$; move $v^*$ from $U$ to $P$
+\EndWhile
+\State \Return $L$, $m(L)$
+\end{algorithmic}
+\end{algorithm}
+
+\section{ACO heuristic (constructive layout)}
+We cast construction as repeatedly adding an unplaced tile at an absolute coordinate. Fix tile $r$ at $(0,0)$ to break translation symmetry. Let $P$ be the set of placed tiles with positions $p_u=(x_u,y_u)$ and $U$ the unplaced set.
+
+\subsection{Sparse relative moves}
+For each ordered pair $(u,v)$, we precompute \emph{feasible offsets} $\Delta=(\Delta x,\Delta y)$ with $|\Delta x|,|\Delta y|\le n-1$ such that, when $v$ is placed at $p_u+\Delta$, all overlapping cells match. We score each by the consistent overlap count $\mathrm{ov}(u,v,\Delta)$ and retain only the top-$K$ offsets (typically $K\in[8,64]$) to sparsify the move space. These define a sparse pheromone tensor $\tau[u,v,\Delta]$.
+
+\subsection{Heuristic and pheromone aggregation}
+When considering placing $v$ at absolute position $(x,y)$, each placed $u\in P$ implies a relative offset $\Delta_{u\to v}=(x-x_u,\,y-y_u)$. We define
+\begin{align*}
+\mathrm{Heuristic}(v,x,y) &= \sum_{u\in P} \eta(u,v,\Delta_{u\to v}), \quad \text{where } \eta(u,v,\Delta)=\mathrm{ov}(u,v,\Delta)\text{ if feasible, else }0,\\
+\mathrm{Phero}(v,x,y) &= \sum_{u\in P} \tau[u,v,\Delta_{u\to v}],\\
+\mathrm{Comp}(v,x,y) &= \exp\big(-\lambda\,\Delta\mathrm{BBox}(v,x,y)\big),
+\end{align*}
+with $\Delta\mathrm{BBox}$ the increase in the bounding box's larger side from adding $(v,x,y)$. The sampling weight is
+\begin{equation}
+ w(v,x,y) \;=\; \big(\mathrm{Phero}(v,x,y)\big)^{\alpha}\cdot\big(\mathrm{Heuristic}(v,x,y)+\epsilon\big)^{\beta}\cdot\big(\mathrm{Comp}(v,x,y)\big)^{\gamma}.
+\end{equation}
+
+\subsection{Candidate generation}
+Rather than scanning all $(x,y)$, we propose a small set per $v$:
+\begin{itemize}
+  \item For each $u\in P$ and each retained $\Delta\in\mathrm{TopK}(u,v)$, propose $(x,y)=p_u+\Delta$.
+  \item Deduplicate and keep only conflict-free positions (checked in $O(n^2)$ via occupancy).
+  \item If a $v$ receives no proposals, add a small set of perimeter positions just outside the current bounding box (allows bridging disconnected components).
+\end{itemize}
+This yields $O(|P|\cdot K)$ proposals per $v$.
+
+\subsection{Pheromone updates}
+We record a parent edge $(u^*,v,\Delta^*)$ per placement, where $u^*$ maximizes $\eta(\cdot)$ at the chosen $(x,y)$. After an ant completes a solution with canvas side $m(\mathcal{S})$, we perform evaporation and reinforcement:
+\begin{align}
+ \tau \;\leftarrow\; (1-\rho)\,\tau,\qquad \tau[u^*,v,\Delta^*] \;\leftarrow\; \tau[u^*,v,\Delta^*] + \frac{Q}{m(\mathcal{S})}.
+\end{align}
+An additional elitist boost on the global-best layout improves stability.
+
+\subsection{Pseudocode}
+\begin{algorithm}[H]
+\caption{Sparse-ACO for 2D Tile Canvas Minimization}
+\begin{algorithmic}[1]
+\Require tiles $A^{(t)}$, size $n$, parameters $K,\alpha,\beta,\gamma,\lambda,\rho,Q$
+\State Precompute \textsc{TopK}$(u,v)$ and overlaps $\mathrm{ov}(u,v,\Delta)$ for $|\Delta|\le n-1$; init $\tau=\tau_0$ on retained entries.
+\For{iteration $=1..I$}
+  \For{ant $=1..N$}
+    \State $P\gets\{r\}$ with $p_r\gets(0,0)$; init occupancy; record parent-edges $E\gets\emptyset$.
+    \While{$|P|<T$}
+      \State $\mathcal{C}\gets\emptyset$ \Comment{candidate moves}
+      \For{each $v\notin P$}
+        \State Propose positions from $\{p_u+\Delta: u\in P,\ \Delta\in\mathrm{TopK}(u,v)\}$; add perimeter fallbacks if none.
+        \For{each feasible $(x,y)$ for $v$}
+          \State Compute $H=\sum_{u\in P}\eta(u,v,\Delta_{u\to v})$, $T=\sum_{u\in P}\tau[u,v,\Delta_{u\to v}]$, $c=\exp(-\lambda\,\Delta\mathrm{BBox})$.
+          \State Add $(v,x,y)$ to $\mathcal{C}$ with weight $w=(T^{\alpha})(H+\epsilon)^{\beta}(c^{\gamma})$.
+        \EndFor
+      \EndFor
+      \State Sample one $(v^*,x^*,y^*)\in\mathcal{C}$ by normalized weights; place $v^*$; update occupancy and bbox.
+      \State Record parent $(u^*,v^*,\Delta^*)$ with maximal $\eta$.
+    \EndWhile
+    \State $m\gets$ final canvas side; evaporate $\tau\leftarrow(1-\rho)\tau$; reinforce edges in $E$ by $Q/m$.
+  \EndFor
+  \State Optionally reinforce global-best edges (elitist).
+\EndFor
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{Complexity and practical settings}
+Per construction step, candidate generation is $O(|P|\cdot K)$; each feasibility check is $O(n^2)$, so overall roughly $O(T\cdot |P|\cdot K\cdot n^2)$ per ant per iteration (typically modest for $n<10$). Recommended defaults: $K=16\text{--}32$, $\alpha=1$, $\beta\in[2,4]$, $\gamma=1$, $\lambda\in[0.01,0.05]$, $\rho=0.1$, $Q\approx n^2$.
+
+\section{Implementation notes}
+\paragraph{Exact solvers.} The MILP feasibility model (Section~2.1) solves to optimality by increasing $m$. A backtracking oracle (Section~2.2) provides an independent ground-truth for very small instances.
+
+\paragraph{Heuristic.} The ACO uses a sparse pheromone tensor on only the best pairwise offsets, drastically shrinking the move space. Perimeter fallback proposals let ants connect components even when pairwise overlaps offer no guidance.
+
+\section{Extensions}
+\begin{itemize}
+  \item \textbf{Rotations/reflections:} expand tiles by distinct transformed copies; include orientation in $(u,v,\Delta)$.
+  \item \textbf{Non-square alphabets / multi-channel:} treat channels independently for feasibility; overlaps sum across channels.
+  \item \textbf{Post-compaction:} a fast greedy left/up compaction after construction often reduces $m$ further without changing consistency.
+  \item \textbf{Lower/upper bounds:} $m\ge \left\lceil\sqrt{\left|\cup_t \mathrm{supp}(A^{(t)})\right|}\,\right\rceil$. Trivial upper bound $m\le n\lceil\sqrt{T}\rceil$ (grid packing).
+\end{itemize}
+
+\section{Summary}
+We formalized the 2D tile canvas minimization problem, presented two exact methods (MILP and backtracking) for ground-truth, and detailed a scalable ACO with strong overlap-aware heuristics and compactness bias. The approach closely follows the ``edge as relative placement'' construction you outlined, while remaining practical for $n<10$.
+
+\end{document}
