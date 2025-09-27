@@ -2,6 +2,7 @@
 \documentclass[11pt]{article}
 \usepackage[margin=1in]{geometry}
 \usepackage{amsmath,amssymb,amsthm}
+\newtheorem{theorem}{Theorem}
 \usepackage{mathtools}
 \usepackage{booktabs}
 \usepackage{algorithm}
@@ -12,10 +13,13 @@
 \usepackage{graphicx}
 \usepackage{xcolor}
 \usepackage{enumitem}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,calc,positioning}
 \setlist[itemize]{noitemsep,topsep=2pt}
 \setlist[enumerate]{noitemsep,topsep=2pt}
 
-\title{A 2D Shortest Superstring (Tile Canvas) Problem: \newline Exact Models and an Ant Colony Optimization Heuristic}
+
+\title{Algorithms for the \newline 2D Shortest Superstring Problem}
 \author{Tran Thanh Dat}
 \date{\today}
 
@@ -27,7 +31,8 @@
 \maketitle
 
 \begin{abstract}
-We study a 2D analogue of the Shortest Superstring problem. Given a set of $T$ square tiles of size $n\times n$ over a finite alphabet, the task is to place one translated copy of each tile on an integer grid so that overlapping cells agree and the side length $m$ of the bounding canvas is minimized. We present: (i) a precise problem statement; (ii) an exact Mixed-Integer Linear Programming (MILP) model solved iteratively over $m$; (iii) a complete brute-force backtracking oracle for small instances; and (iv) a practical Ant Colony Optimization (ACO) heuristic with sparse pheromones, overlap-based heuristics, and compactness bias. The formulations match the provided construction paradigm (edges encode relative placements), and the ACO is designed to scale for $n<10$ and moderate $T$.
+We study a 2D analogue of the Shortest Superstring problem: given $T$ square tiles of size $n\times n$ over a finite alphabet, place one translated copy of each tile on the integer grid so overlapping cells agree and the side length $m$ of the bounding square is minimized. We list: (i) a formal problem statement and complexity discussion; (ii) an exact MILP formulation solved by iterating (or binary-searching) $m$; (iii) a complete brute-force backtracking oracle for very small instances; (iv) fast greedy heuristics (overlap driven placement and minimum-expansion driven placement) that serve as strong baselines and initializers; (v) a practical ACO heuristic with sparse pheromones, overlap-based construction rules and compactness bias designed to scale for $n<10$ and moderate $T$; and (vi) a neural-solver roadmap: graph neural networks to predict pairwise offsets, autoregressive/transformer models to produce placement sequences, and imitation-/reinforcement-learning schemes — all usable in hybrid pipelines where learned models supply candidate moves, candidate lists, or initial pheromone maps to search heuristics. All approaches follow a common construction paradigm in which edges encode relative placements; we (TODO) evaluate the trade-off between runtime and optimality across exact, greedy, heuristic, and learned methods.
+
 \end{abstract}
 
 \section{Problem definition}
@@ -61,7 +66,7 @@ Conflicts are precomputed in $O(n^2)$ per pair of placements by checking the int
 
 The model has $T\cdot(m-n+1)^2$ binaries. We iterate $m=n,n+1,\ldots,\bar m$ (with a simple upper bound like $\bar m = n\lceil\sqrt{T}\rceil$) and solve~\eqref{eq:assign}--\eqref{eq:conflict} for feasibility. The first feasible $m$ is optimal.
 
-\subsection{Brute-force backtracking oracle}
+\subsection{Backtracking and Greedy Algorithms}
 For small $n$ and moderate $T$, an exact search over placements is practical. For each $m$ from $n$ upward:
 \begin{enumerate}[label=(\roman*)]
   \item Enumerate the domain $\{0,\dots,m-n\}^2$ for every tile.
@@ -73,12 +78,12 @@ This exactly matches the feasibility decision and returns optimal $m$ at the fir
 \begin{algorithm}[H]
 \caption{Greedy Overlap Insertion (GOI)}
 \begin{algorithmic}[1]
-\Require Tiles $\mathcal{T}$ ($n\times n$), TopK feasible offsets with $ov>0$
+\Require Tiles $\mathcal{T}$ ($n\times n$), All feasible offsets $\Delta d$ for $u$
 \State $L \gets \{(r,0,0)\}$; $P\gets\{r\}$; $U\gets\mathcal{T}\setminus\{r\}$; init $\mathsf{BBox}$
 \While{$U\neq\emptyset$}
   \State $\mathsf{Best}\gets\text{None}$
   \ForAll{$v\in U$}
-     \State $\mathcal{C}_v \gets \{(x_u+dx, y_u+dy)\}$ from $u\in P$, $(dx,dy)\in\text{TopK}(u,v)$
+     \State $\mathcal{C}_v \gets \{(x_u+d_x, y_u+d_y)\}$ from $u\in P$
      \If{$\mathcal{C}_v=\emptyset$} add perimeter candidates \EndIf
      \ForAll{$(x,y)\in\mathcal{C}_v$}
         \If{placing $v$ at $(x,y)$ is conflict-free}
@@ -103,7 +108,7 @@ This exactly matches the feasibility decision and returns optimal $m$ at the fir
 \While{$U\neq\emptyset$}
   \State $\mathsf{Best}\gets\text{None}$
   \ForAll{$v\in U$}
-     \State build $\mathcal{C}_v$ as in GOI (TopK + perimeter if needed)
+     \State build $\mathcal{C}_v$ as in GOI
      \ForAll{$(x,y)\in\mathcal{C}_v$}
         \If{conflict-free}
            \State $\Delta m \gets$ enlargement of canvas side
@@ -130,12 +135,14 @@ When considering placing $v$ at absolute position $(x,y)$, each placed $u\in P$ 
 \begin{align*}
 \mathrm{Heuristic}(v,x,y) &= \sum_{u\in P} \eta(u,v,\Delta_{u\to v}), \quad \text{where } \eta(u,v,\Delta)=\mathrm{ov}(u,v,\Delta)\text{ if feasible, else }0,\\
 \mathrm{Phero}(v,x,y) &= \sum_{u\in P} \tau[u,v,\Delta_{u\to v}],\\
-\mathrm{Comp}(v,x,y) &= \exp\big(-\lambda\,\Delta\mathrm{BBox}(v,x,y)\big),
+% \mathrm{Comp}(v,x,y) &= \exp\big(-\lambda\,\Delta\mathrm{BBox}(v,x,y)\big),
 \end{align*}
 with $\Delta\mathrm{BBox}$ the increase in the bounding box's larger side from adding $(v,x,y)$. The sampling weight is
 \begin{equation}
- w(v,x,y) \;=\; \big(\mathrm{Phero}(v,x,y)\big)^{\alpha}\cdot\big(\mathrm{Heuristic}(v,x,y)+\epsilon\big)^{\beta}\cdot\big(\mathrm{Comp}(v,x,y)\big)^{\gamma}.
+ w(v,x,y) \;=\; \big(\mathrm{Phero}(v,x,y)\big)^{\alpha}\cdot\big(\mathrm{Heuristic}(v,x,y)+\epsilon\big)^{\beta}.%\cdot\big(\mathrm{Comp}(v,x,y)\big)^{\gamma}.
 \end{equation}
+
+Optionally, we could multiply the weight with the weighted solution cost increased value $\big(\mathrm{Comp}(v,x,y)\big)^{\gamma}$
 
 \subsection{Candidate generation}
 Rather than scanning all $(x,y)$, we propose a small set per $v$:
@@ -146,33 +153,86 @@ Rather than scanning all $(x,y)$, we propose a small set per $v$:
 \end{itemize}
 This yields $O(|P|\cdot K)$ proposals per $v$.
 
+\subsubsection{Augmenting the candidate offsets with adjacency}
+For each ordered pair $(u,v)$ we precompute the set of feasible overlap offsets
+
+$$
+\mathcal{F}(u,v)\subseteq\{(\Delta x,\Delta y):|\Delta x|,|\Delta y|\le n-1\},
+$$
+
+where placing $v$ at $p_u+\Delta$ yields only consistent symbol matches on the overlap. Each $\Delta\in\mathcal{F}(u,v)$ is scored by its consistent overlap count $\mathrm{ov}(u,v,\Delta)$, and we retain the top–$K$ by this score.
+
+To preserve completeness, we always augment these with all edge-adjacent (non-overlapping) offsets
+
+$$
+\mathcal{A}_n \;=\; \{(\pm n,t): t\in[-(n-1),n-1]\}\;\cup\;\{(t,\pm n): t\in[-(n-1),n-1]\},
+$$
+
+(optionally also including the four corner-touch offsets $\{(\pm n,\pm n)\}$ if point contacts are allowed). These offsets do not create any overlap, so we set $\mathrm{ov}(u,v,\Delta)=0$ for $\Delta\in\mathcal{A}_n$.
+
+The final candidate set and pheromone domain for $(u,v)$ is
+
+$$
+\mathcal{C}(u,v)\;=\;\operatorname{TopK}\big(\mathcal{F}(u,v),K\big)\;\cup\;\mathcal{A}_n,
+\qquad
+\text{and}\quad \tau[u,v,\Delta]\ \text{is defined only for }\Delta\in\mathcal{C}(u,v).
+$$
+
+In practice $|\mathcal{A}_n|=4(2n-1)$ (or $4(2n-1)+4$ with corners), which keeps the move space sparse while ensuring that purely adjacent placements remain available even when $K$ is small. If desired, initialize adjacency pheromones with a mild discount, e.g. $\tau_0^{(\mathrm{adj})}=\alpha\,\tau_0$ with $\alpha\in(0,1)$, so ants prefer informative overlaps but can still chain components via adjacency when necessary.
+
+\begin{theorem}[Completeness of neighbor-induced candidates]
+Let $\mathcal{T}$ be a set of $n\times n$ tiles and consider the canvas-minimization problem under symbol-consistency.
+Assume a construction procedure that, at each step, from the set $P$ of already placed tiles proposes, for every $u\in P$ and $v\notin P$, all conflict-free absolute placements of $v$ that
+(i) yield nonempty overlap with $u$ or (ii) are edge-adjacent to $u$.
+Then some optimal solution can be constructed by repeatedly selecting from these candidates.
+\end{theorem}
+
+\begin{proof}[Proof sketch]
+First, any optimal solution can be tightened so that its contact graph (tiles are vertices; edges connect overlapping or edge-adjacent pairs) is connected: translate connected components rigidly toward each other until first contact, never increasing the bounding box. Fix such an optimal layout $\Pi^\star$ and take a spanning tree of its contact graph. Place tiles in a tree order starting from an arbitrary root $r$. When placing a child $v$ of a placed parent $u$, the relative offset $\Delta^\star = p_v - p_u$ realized in $\Pi^\star$ yields a feasible candidate by assumption, and it is consistent with all previously placed tiles because we replicate $\Pi^\star$ exactly. By induction, the procedure reconstructs $\Pi^\star$ (or an equally optimal layout). 
+\end{proof}
+
+
 \subsection{Pheromone updates}
 We record a parent edge $(u^*,v,\Delta^*)$ per placement, where $u^*$ maximizes $\eta(\cdot)$ at the chosen $(x,y)$. After an ant completes a solution with canvas side $m(\mathcal{S})$, we perform evaporation and reinforcement:
 \begin{align}
  \tau \;\leftarrow\; (1-\rho)\,\tau,\qquad \tau[u^*,v,\Delta^*] \;\leftarrow\; \tau[u^*,v,\Delta^*] + \frac{Q}{m(\mathcal{S})}.
 \end{align}
 An additional elitist boost on the global-best layout improves stability.
-
 \subsection{Pseudocode}
 \begin{algorithm}[H]
-\caption{Sparse-ACO for 2D Tile Canvas Minimization}
+\caption{Sparse-ACO for 2D Tile Canvas Minimization (with adjacency offsets)}
 \begin{algorithmic}[1]
-\Require tiles $A^{(t)}$, size $n$, parameters $K,\alpha,\beta,\gamma,\lambda,\rho,Q$
-\State Precompute \textsc{TopK}$(u,v)$ and overlaps $\mathrm{ov}(u,v,\Delta)$ for $|\Delta|\le n-1$; init $\tau=\tau_0$ on retained entries.
+\Require tiles $A^{(t)}$, size $n$, parameters $K,\alpha,\beta,\gamma,\lambda,\rho,Q,\alpha_{\mathrm{adj}}$
+\State Precompute the adjacency set $\mathcal{A}_n=\{(\pm n,t):t\in[-(n-1),n-1]\}\cup\{(t,\pm n):t\in[-(n-1),n-1]\}$ (optionally $\{(\pm n,\pm n)\}$).
+\State For each ordered pair $(u,v)$:
+\State \hspace{1em} Compute feasible overlap offsets $\mathcal{F}(u,v)=\{\Delta:|\Delta_x|,|\Delta_y|\le n-1,\ \text{overlap matches}\}$ and scores $\mathrm{ov}(u,v,\Delta)$.
+\State \hspace{1em} Let $\textsc{TopK}(u,v)=\operatorname{TopK}(\mathcal{F}(u,v),K)$ by $\mathrm{ov}$.
+\State \hspace{1em} Define candidate-offset set $\mathcal{C}(u,v)=\textsc{TopK}(u,v)\ \cup\ \mathcal{A}_n$.
+\State Initialize sparse pheromone tensor $\tau$ only on $\{(u,v,\Delta):\Delta\in\mathcal{C}(u,v)\}$ with
+\State \hspace{1em} $\tau[u,v,\Delta]\gets
+\begin{cases}
+\tau_0 & \Delta\in\textsc{TopK}(u,v),\\
+\alpha_{\mathrm{adj}}\cdot\tau_0 & \Delta\in\mathcal{A}_n
+\end{cases}$ \quad and set $\mathrm{ov}(u,v,\Delta)=0$ for $\Delta\in\mathcal{A}_n$.
 \For{iteration $=1..I$}
   \For{ant $=1..N$}
     \State $P\gets\{r\}$ with $p_r\gets(0,0)$; init occupancy; record parent-edges $E\gets\emptyset$.
     \While{$|P|<T$}
       \State $\mathcal{C}\gets\emptyset$ \Comment{candidate moves}
       \For{each $v\notin P$}
-        \State Propose positions from $\{p_u+\Delta: u\in P,\ \Delta\in\mathrm{TopK}(u,v)\}$; add perimeter fallbacks if none.
-        \For{each feasible $(x,y)$ for $v$}
-          \State Compute $H=\sum_{u\in P}\eta(u,v,\Delta_{u\to v})$, $T=\sum_{u\in P}\tau[u,v,\Delta_{u\to v}]$, $c=\exp(-\lambda\,\Delta\mathrm{BBox})$.
-          \State Add $(v,x,y)$ to $\mathcal{C}$ with weight $w=(T^{\alpha})(H+\epsilon)^{\beta}(c^{\gamma})$.
+        \State Propose positions from $\{\,p_u+\Delta:\ u\in P,\ \Delta\in\mathcal{C}(u,v)\,\}$.
+        \For{each feasible placement $(x,y)$ for $v$ (no conflicts)}
+          \State For this $(v,x,y)$, let $\Delta_{u\to v}=(x,y)-p_u$ for each $u\in P$ with $\Delta_{u\to v}\in\mathcal{C}(u,v)$.
+          \State Compute heuristic and pheromone aggregates
+          \[
+          H=\sum_{u\in P}\eta(u,v,\Delta_{u\to v}),\qquad
+          T=\sum_{u\in P}\tau[u,v,\Delta_{u\to v}].
+          \]
+          \State Add $(v,x,y)$ to $\mathcal{C}$ with weight $w=(T^{\alpha})(H+\epsilon)^{\beta}$. % (c^{\gamma}) if using compactness
         \EndFor
       \EndFor
       \State Sample one $(v^*,x^*,y^*)\in\mathcal{C}$ by normalized weights; place $v^*$; update occupancy and bbox.
-      \State Record parent $(u^*,v^*,\Delta^*)$ with maximal $\eta$.
+      % \State Record parent $(u^*,v^*,\Delta^*)$ with maximal $\eta$ (breaking ties by $\tau$).
     \EndWhile
     \State $m\gets$ final canvas side; evaporate $\tau\leftarrow(1-\rho)\tau$; reinforce edges in $E$ by $Q/m$.
   \EndFor
@@ -181,23 +241,117 @@ An additional elitist boost on the global-best layout improves stability.
 \end{algorithmic}
 \end{algorithm}
 
+
 \subsection{Complexity and practical settings}
 Per construction step, candidate generation is $O(|P|\cdot K)$; each feasibility check is $O(n^2)$, so overall roughly $O(T\cdot |P|\cdot K\cdot n^2)$ per ant per iteration (typically modest for $n<10$). Recommended defaults: $K=16\text{--}32$, $\alpha=1$, $\beta\in[2,4]$, $\gamma=1$, $\lambda\in[0.01,0.05]$, $\rho=0.1$, $Q\approx n^2$.
 
-\section{Implementation notes}
-\paragraph{Exact solvers.} The MILP feasibility model (Section~2.1) solves to optimality by increasing $m$. A backtracking oracle (Section~2.2) provides an independent ground-truth for very small instances.
+\section{Neural Solver with Attention-Guided Construction}
+\label{sec:neural}
 
-\paragraph{Heuristic.} The ACO uses a sparse pheromone tensor on only the best pairwise offsets, drastically shrinking the move space. Perimeter fallback proposals let ants connect components even when pairwise overlaps offer no guidance.
+We ``neuralize'' the constructive paradigm by replacing hand-crafted scoring
+with an attention model that selects placements from the same sparse move space.
+At each step, the network points to one feasible candidate
+$c=(v,u,\Delta)$ where $v$ is an unplaced tile, $u\in P$ is an anchor tile,
+and $\Delta\in\mathcal{C}(u,v)=\textsc{TopK}(u,v)\cup\mathcal{A}_n$ is a precomputed
+relative offset).
 
-\section{Extensions}
-\begin{itemize}
-  \item \textbf{Rotations/reflections:} expand tiles by distinct transformed copies; include orientation in $(u,v,\Delta)$.
-  \item \textbf{Non-square alphabets / multi-channel:} treat channels independently for feasibility; overlaps sum across channels.
-  \item \textbf{Post-compaction:} a fast greedy left/up compaction after construction often reduces $m$ further without changing consistency.
-  \item \textbf{Lower/upper bounds:} $m\ge \left\lceil\sqrt{\left|\cup_t \mathrm{supp}(A^{(t)})\right|}\,\right\rceil$. Trivial upper bound $m\le n\lceil\sqrt{T}\rceil$ (grid packing).
-\end{itemize}
+\subsection{Representations}
+\paragraph{Tile encoder.}
+A small CNN encodes each tile $A^{(t)}\in\Sigma^{n\times n}$ into
+$E_t \in \mathbb{R}^d$.
 
-\section{Summary}
-We formalized the 2D tile canvas minimization problem, presented two exact methods (MILP and backtracking) for ground-truth, and detailed a scalable ACO with strong overlap-aware heuristics and compactness bias. The approach closely follows the ``edge as relative placement'' construction you outlined, while remaining practical for $n<10$.
+\paragraph{Pairwise compatibility head.}
+We learn a neural overlap score $s_\theta(u,v,\Delta)\approx \mathrm{ov}(u,v,\Delta)$
+via an MLP over $[E_u\,\|\,E_v\,\|\,\phi(\Delta)]$,
+with $\phi(\Delta)$ a learned embedding of the offset.
 
+\paragraph{Canvas/state encoder.}
+We maintain (i) a cropped rasterized occupancy around the current
+bounding box, encoded by a shallow CNN into $Z_{\text{canvas}}$, and
+(ii) a set of placed-tile tokens $\{E_u \oplus \psi(p_u)\}_{u\in P}$,
+encoded by a Transformer encoder into $Z_P$, where $\psi$ denotes 2D
+positional encodings of absolute coordinates.
+
+\subsection{Sparse candidate set}
+For each ordered pair $(u,v)$ we precompute
+$\mathcal{C}(u,v)=\operatorname{TopK}(\mathcal{F}(u,v),K)\cup\mathcal{A}_n$,
+with $\mathcal{A}_n$ the edge-adjacent offsets (optionally corners), and
+$\mathrm{ov}(u,v,\Delta)=0$ for $\Delta\in\mathcal{A}_n$.
+Given the current partial layout, the feasible candidates at a step are
+\[
+  \mathsf{Cand} \;=\; \big\{(v,u,\Delta)\;:\; v\notin P,\ u\in P,\ \Delta\in\mathcal{C}(u,v),\ 
+  \text{$v$ at $p_u+\Delta$ is conflict-free}\big\}.
+\]
+This preserves the $O(|P|\cdot K)$ proposal budget.
+
+\subsection{Attention decoder}
+For each $c=(v,u,\Delta)\in\mathsf{Cand}$ we form a candidate feature
+\[
+  f_c \;=\; \big[E_v\,\|\,E_u\,\|\,\psi(p_u)\,\|\,\phi(\Delta)\,\|\,s_\theta(u,v,\Delta)\,\|\,\kappa(\Delta\mathrm{BBox})\big],
+\]
+where $\kappa$ is a compactness feature (e.g., negative bbox growth).
+A pointer-style Transformer decoder attends to $Z_P$ and $Z_{\text{canvas}}$
+to produce a logit
+\[
+  \ell_c \;=\; g_\theta\!\left(f_c,\ \mathrm{Attn}\!\left(f_c;\, Z_P \cup Z_{\text{canvas}}\right)\right),
+\quad
+  \pi_\theta(c\mid \text{state}) \;=\; \frac{\exp(\ell_c)}{\sum_{c'\in\mathsf{Cand}}\exp(\ell_{c'})}.
+\]
+Infeasible candidates are masked from the softmax.
+
+\paragraph{Neural pheromone (optional).}
+We maintain a learnable memory $M[u,v,\Delta]$ updated after each action via a gated
+cell; $M[u,v,\Delta]$ is concatenated to $f_c$ to mimic ACO biasing while learning
+when adjacency moves are helpful.
+
+\subsection{Training}
+\paragraph{Imitation learning.}
+We collect trajectories from exact/backtracking (small cases) and GOI/GLEI/ACO.
+At each step we supervise the chosen candidate $c^*$ with cross-entropy:
+\[
+  \mathcal{L}_{\text{sup}} \;=\; -\sum_t \log \pi_\theta(c_t^* \mid \text{state}_t).
+\]
+Auxiliary heads stabilize learning:
+(i) overlap regression $\mathcal{L}_{\text{ov}} = \|s_\theta - \mathrm{ov}\|_2^2$,
+(ii) value prediction for final canvas side $\hat m$ with
+$\mathcal{L}_{\text{val}} = \|\hat m - m\|_2^2$,
+(iii) pairwise ranking to separate feasible from conflicting offsets.
+
+\paragraph{Reinforcement learning.}
+We fine-tune with PPO using reward $R=-m(\mathcal{S}) - \lambda_{\text{grow}}\!\sum_t \max(0,\Delta \mathrm{BBox}_t)$
+and an entropy bonus to encourage exploration of adjacency when overlaps are scarce.
+
+\paragraph{Curriculum.}
+We increase difficulty by scaling $(n,T)$, widening $K$, and enabling $\mathcal{A}_n$
+from the start so the policy learns to chain components.
+
+\subsection{Inference}
+We decode with greedy or small-beam selection over $\mathsf{Cand}$.
+Feasibility remains enforced by masks; complexity per step matches the sparse generator.
+
+\begin{algorithm}[H]
+\caption{Neural Pointer Decoder for Tile Placement}
+\begin{algorithmic}[1]
+\Require Tiles $\{A^{(t)}\}$, precomputed $\mathcal{C}(u,v)$ and $s_\theta$, trained params $\theta$
+\State Initialize $P\gets\{r\}$ with $p_r\gets(0,0)$; occupancy and bbox
+\While{$|P|<T$}
+  \State Build $\mathsf{Cand}=\{(v,u,\Delta)\}$ from $u\in P$, $v\notin P$, $\Delta\in\mathcal{C}(u,v)$ and filter by feasibility
+  \State Encode tiles and state: $E_t$, $Z_P$, $Z_{\text{canvas}}$
+  \ForAll{$c=(v,u,\Delta)\in\mathsf{Cand}$}
+     \State $f_c\gets [E_v\,\|\,E_u\,\|\,\psi(p_u)\,\|\,\phi(\Delta)\,\|\,s_\theta(u,v,\Delta)\,\|\,\kappa(\Delta\mathrm{BBox})\,\|\,M[u,v,\Delta]]$
+     \State $\ell_c \gets g_\theta\!\left(f_c,\ \mathrm{Attn}\!\left(f_c;\,Z_P \cup Z_{\text{canvas}}\right)\right)$
+  \EndFor
+  \State Sample/Select $c^*=\arg\max \pi_\theta(c)$; place $v$ at $p_u+\Delta$; update occupancy, bbox, $P$
+  \State Update memory $M$ for $(u,v,\Delta)$
+\EndWhile
+\State \Return final layout and canvas side $m$
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{Discussion}
+The current model primarily learns and embeds the objective $\Delta\mathrm{BBox}$, which represents the incremental cost of the solution. For ablation studies, we might consider ignoring this value, since in my preliminary experiments with ACO, incorporating $\Delta\mathrm{BBox}$ into the final weight actually yielded worse results than omitting it.
+
+The use of $\mathrm{TopK}$ implies that the optimal solution is not guaranteed to be constructed using such candidate set. Are there alternative approaches to building the candidate list? One possibility is to conduct an ablation study to evaluate whether the computational efficiency gained from $\mathrm{TopK}$, allowing for more ants, iterations, or epochs, compensates for the potential loss in optimality.
+
+We welcome your thoughts and suggestions on this direction.
 \end{document}

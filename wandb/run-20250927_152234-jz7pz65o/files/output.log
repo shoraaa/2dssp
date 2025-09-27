@@ -1,0 +1,67 @@
+[ACO Performance] Starting ACO with 100 iterations, 10 ants, 8 workers
+[ACO Performance] Starting overlap precomputation for 30 tiles...
+[ACO Performance] Overlap precomputation completed in 0.424s
+[ACO Performance] - Overlap checks performed: 70,470
+[ACO Performance] - Valid overlaps found: 5,870
+[ACO Performance] - Efficiency: 166346 checks/sec
+[ACO Performance] Preprocessing completed in 0.431s
+[ACO Performance] - Pheromone matrix size: 5,870 edges
+ACO Iterations:  17%|█████████████▊                                                                   | 17/100 [00:33<02:44,  1.99s/iter]
+[ACO Performance] Iter   1: 10/10 valid, best_m=10, iter_best=10, time=7.677s (avg=7.677s)
+[ACO Performance] Iter   2: 10/10 valid, best_m=10, iter_best=10, time=2.962s (avg=5.319s)
+[ACO Performance] Iter   3: 10/10 valid, best_m=10, iter_best=10, time=2.917s (avg=4.518s)
+[ACO Performance] Iter   4: 10/10 valid, best_m=10, iter_best=10, time=2.794s (avg=4.087s)
+[ACO Performance] Iter   5: 10/10 valid, best_m=10, iter_best=10, time=3.060s (avg=3.882s)
+[ACO Performance] Iter   6: 10/10 valid, best_m=10, iter_best=10, time=1.115s (avg=3.421s)
+[ACO Performance] Iter   7: 10/10 valid, best_m=10, iter_best=10, time=1.081s (avg=3.086s)
+[ACO Performance] Iter   8: 10/10 valid, best_m=10, iter_best=10, time=1.065s (avg=2.834s)
+[ACO Performance] Iter   9: 10/10 valid, best_m=10, iter_best=10, time=1.702s (avg=2.708s)
+[ACO Performance] Iter  10: 10/10 valid, best_m=10, iter_best=10, time=1.376s (avg=2.575s)
+[ACO Performance] Iter  11: 10/10 valid, best_m=10, iter_best=10, time=1.109s (avg=1.918s)
+[ACO Performance] Iter  12: 10/10 valid, best_m=10, iter_best=10, time=0.975s (avg=1.719s)
+[ACO Performance] Iter  13: 10/10 valid, best_m=10, iter_best=10, time=0.988s (avg=1.526s)
+[ACO Performance] Iter  14: 10/10 valid, best_m=10, iter_best=10, time=1.056s (avg=1.353s)
+[ACO Performance] Iter  15: 10/10 valid, best_m=10, iter_best=10, time=1.027s (avg=1.149s)
+[ACO Performance] Iter  16: 10/10 valid, best_m=10, iter_best=10, time=0.979s (avg=1.136s)
+[ACO Performance] Iter  17: 10/10 valid, best_m=10, iter_best=10, time=1.028s (avg=1.130s)
+Traceback (most recent call last):
+  File "D:\Research\2dssp\aco_all.py", line 402, in solve_with_aco
+    results = list(pool.map(_build_ant_solution_worker, seeds, [tau_snapshot]*params.n_ants))
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Shora\AppData\Roaming\uv\python\cpython-3.11.13-windows-x86_64-none\Lib\concurrent\futures\process.py", line 620, in _chain_from_iterable_of_lists
+    for element in iterable:
+  File "C:\Users\Shora\AppData\Roaming\uv\python\cpython-3.11.13-windows-x86_64-none\Lib\concurrent\futures\_base.py", line 619, in result_iterator
+    yield _result_or_cancel(fs.pop())
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Shora\AppData\Roaming\uv\python\cpython-3.11.13-windows-x86_64-none\Lib\concurrent\futures\_base.py", line 317, in _result_or_cancel
+    return fut.result(timeout)
+           ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Shora\AppData\Roaming\uv\python\cpython-3.11.13-windows-x86_64-none\Lib\concurrent\futures\_base.py", line 451, in result
+    self._condition.wait(timeout)
+  File "C:\Users\Shora\AppData\Roaming\uv\python\cpython-3.11.13-windows-x86_64-none\Lib\threading.py", line 327, in wait
+    waiter.acquire()
+KeyboardInterrupt
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "D:\Research\2dssp\benchmark.py", line 167, in <module>
+    main()
+  File "D:\Research\2dssp\benchmark.py", line 138, in main
+    r = run_once(data, ants=args.ants, iters=args.iters, K=args.K, compaction=args.compaction, seed=args.seed)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Research\2dssp\benchmark.py", line 77, in run_once
+    aco_res = solve_with_aco(tiles_list, aco_params)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Research\2dssp\aco_all.py", line 392, in solve_with_aco
+    with ProcessPoolExecutor(max_workers=params.n_workers, initializer=_init_worker,
+  File "C:\Users\Shora\AppData\Roaming\uv\python\cpython-3.11.13-windows-x86_64-none\Lib\concurrent\futures\_base.py", line 647, in __exit__
+    self.shutdown(wait=True)
+  File "C:\Users\Shora\AppData\Roaming\uv\python\cpython-3.11.13-windows-x86_64-none\Lib\concurrent\futures\process.py", line 851, in shutdown
+    self._executor_manager_thread.join()
+  File "C:\Users\Shora\AppData\Roaming\uv\python\cpython-3.11.13-windows-x86_64-none\Lib\threading.py", line 1119, in join
+    self._wait_for_tstate_lock()
+  File "C:\Users\Shora\AppData\Roaming\uv\python\cpython-3.11.13-windows-x86_64-none\Lib\threading.py", line 1139, in _wait_for_tstate_lock
+    if lock.acquire(block, timeout):
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyboardInterrupt

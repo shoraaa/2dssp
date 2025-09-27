@@ -1,0 +1,133 @@
+2025-09-27 15:24:48,714 INFO    MainThread:16116 [wandb_setup.py:_flush():81] Current SDK version is 0.22.0
+2025-09-27 15:24:48,714 INFO    MainThread:16116 [wandb_setup.py:_flush():81] Configure stats pid to 16116
+2025-09-27 15:24:48,714 INFO    MainThread:16116 [wandb_setup.py:_flush():81] Loading settings from C:\Users\Shora\.config\wandb\settings
+2025-09-27 15:24:48,714 INFO    MainThread:16116 [wandb_setup.py:_flush():81] Loading settings from D:\Research\2dssp\wandb\settings
+2025-09-27 15:24:48,714 INFO    MainThread:16116 [wandb_setup.py:_flush():81] Loading settings from environment variables
+2025-09-27 15:24:48,714 INFO    MainThread:16116 [wandb_init.py:setup_run_log_directory():686] Logging user logs to D:\Research\2dssp\wandb\run-20250927_152448-rt1o5s16\logs\debug.log
+2025-09-27 15:24:48,727 INFO    MainThread:16116 [wandb_init.py:setup_run_log_directory():687] Logging internal logs to D:\Research\2dssp\wandb\run-20250927_152448-rt1o5s16\logs\debug-internal.log
+2025-09-27 15:24:48,727 INFO    MainThread:16116 [wandb_init.py:init():813] calling init triggers
+2025-09-27 15:24:48,727 INFO    MainThread:16116 [wandb_init.py:init():818] wandb.init called with sweep_config: {}
+config: {'iterations': 20, 'n_ants': 8, 'n_workers': 8, 'alpha': 1.0, 'beta': 3.0, 'gamma': 1.0, 'lambda': 0.05, 'epsilon': 1.0, 'rho': 0.1, 'Q': 25.0, 'random_seed': 123, 'n_tiles': 100, 'tile_size': 5, 'enable_compaction': False, '_wandb': {}}
+2025-09-27 15:24:48,727 INFO    MainThread:16116 [wandb_init.py:init():861] starting backend
+2025-09-27 15:24:50,992 INFO    MainThread:16116 [wandb_init.py:init():864] sending inform_init request
+2025-09-27 15:24:51,019 INFO    MainThread:16116 [wandb_init.py:init():872] backend started and connected
+2025-09-27 15:24:51,022 INFO    MainThread:16116 [wandb_init.py:init():942] updated telemetry
+2025-09-27 15:24:51,079 INFO    MainThread:16116 [wandb_init.py:init():966] communicating run to backend with 90.0 second timeout
+2025-09-27 15:24:53,170 INFO    MainThread:16116 [wandb_init.py:init():1017] starting run threads in backend
+2025-09-27 15:24:53,206 INFO    MainThread:16116 [wandb_run.py:_console_start():2506] atexit reg
+2025-09-27 15:24:53,207 INFO    MainThread:16116 [wandb_run.py:_redirect():2354] redirect: wrap_raw
+2025-09-27 15:24:53,207 INFO    MainThread:16116 [wandb_run.py:_redirect():2423] Wrapping output streams.
+2025-09-27 15:24:53,207 INFO    MainThread:16116 [wandb_run.py:_redirect():2446] Redirects installed.
+2025-09-27 15:24:53,210 INFO    MainThread:16116 [wandb_init.py:init():1057] run started, returning control to user process
+2025-09-27 15:29:34,710 INFO    wandb-AsyncioManager-main:16116 [service_client.py:_forward_responses():84] Reached EOF.
+2025-09-27 15:29:34,710 INFO    wandb-AsyncioManager-main:16116 [mailbox.py:close():137] Closing mailbox, abandoning 1 handles.
+2025-09-27 15:29:36,771 ERROR   wandb-AsyncioManager-main:16116 [asyncio_manager.py:fn_wrap_exceptions():183] Uncaught exception in run_soon callback.
+Traceback (most recent call last):
+  File "D:\Research\2dssp\.venv\Lib\site-packages\wandb\sdk\lib\asyncio_manager.py", line 181, in fn_wrap_exceptions
+    await fn()
+  File "D:\Research\2dssp\.venv\Lib\site-packages\wandb\sdk\lib\service\service_client.py", line 65, in _send_server_request
+    await self._writer.drain()
+  File "C:\Users\Shora\AppData\Roaming\uv\python\cpython-3.11.13-windows-x86_64-none\Lib\asyncio\streams.py", line 392, in drain
+    await self._protocol._drain_helper()
+  File "C:\Users\Shora\AppData\Roaming\uv\python\cpython-3.11.13-windows-x86_64-none\Lib\asyncio\streams.py", line 166, in _drain_helper
+    raise ConnectionResetError('Connection lost')
+ConnectionResetError: Connection lost
+2025-09-27 15:29:36,774 ERROR   wandb-AsyncioManager-main:16116 [asyncio_manager.py:fn_wrap_exceptions():183] Uncaught exception in run_soon callback.
+Traceback (most recent call last):
+  File "D:\Research\2dssp\.venv\Lib\site-packages\wandb\sdk\lib\asyncio_manager.py", line 181, in fn_wrap_exceptions
+    await fn()
+  File "D:\Research\2dssp\.venv\Lib\site-packages\wandb\sdk\lib\service\service_client.py", line 65, in _send_server_request
+    await self._writer.drain()
+  File "C:\Users\Shora\AppData\Roaming\uv\python\cpython-3.11.13-windows-x86_64-none\Lib\asyncio\streams.py", line 392, in drain
+    await self._protocol._drain_helper()
+  File "C:\Users\Shora\AppData\Roaming\uv\python\cpython-3.11.13-windows-x86_64-none\Lib\asyncio\streams.py", line 166, in _drain_helper
+    raise ConnectionResetError('Connection lost')
+ConnectionResetError: Connection lost
+2025-09-27 15:29:36,776 ERROR   wandb-AsyncioManager-main:16116 [asyncio_manager.py:fn_wrap_exceptions():183] Uncaught exception in run_soon callback.
+Traceback (most recent call last):
+  File "D:\Research\2dssp\.venv\Lib\site-packages\wandb\sdk\lib\asyncio_manager.py", line 181, in fn_wrap_exceptions
+    await fn()
+  File "D:\Research\2dssp\.venv\Lib\site-packages\wandb\sdk\lib\service\service_client.py", line 65, in _send_server_request
+    await self._writer.drain()
+  File "C:\Users\Shora\AppData\Roaming\uv\python\cpython-3.11.13-windows-x86_64-none\Lib\asyncio\streams.py", line 392, in drain
+    await self._protocol._drain_helper()
+  File "C:\Users\Shora\AppData\Roaming\uv\python\cpython-3.11.13-windows-x86_64-none\Lib\asyncio\streams.py", line 166, in _drain_helper
+    raise ConnectionResetError('Connection lost')
+ConnectionResetError: Connection lost
+2025-09-27 15:29:36,783 ERROR   wandb-AsyncioManager-main:16116 [asyncio_manager.py:fn_wrap_exceptions():183] Uncaught exception in run_soon callback.
+Traceback (most recent call last):
+  File "D:\Research\2dssp\.venv\Lib\site-packages\wandb\sdk\lib\asyncio_manager.py", line 181, in fn_wrap_exceptions
+    await fn()
+  File "D:\Research\2dssp\.venv\Lib\site-packages\wandb\sdk\lib\service\service_client.py", line 65, in _send_server_request
+    await self._writer.drain()
+  File "C:\Users\Shora\AppData\Roaming\uv\python\cpython-3.11.13-windows-x86_64-none\Lib\asyncio\streams.py", line 392, in drain
+    await self._protocol._drain_helper()
+  File "C:\Users\Shora\AppData\Roaming\uv\python\cpython-3.11.13-windows-x86_64-none\Lib\asyncio\streams.py", line 166, in _drain_helper
+    raise ConnectionResetError('Connection lost')
+ConnectionResetError: Connection lost
+2025-09-27 15:29:36,784 ERROR   wandb-AsyncioManager-main:16116 [asyncio_manager.py:fn_wrap_exceptions():183] Uncaught exception in run_soon callback.
+Traceback (most recent call last):
+  File "D:\Research\2dssp\.venv\Lib\site-packages\wandb\sdk\lib\asyncio_manager.py", line 181, in fn_wrap_exceptions
+    await fn()
+  File "D:\Research\2dssp\.venv\Lib\site-packages\wandb\sdk\lib\service\service_client.py", line 65, in _send_server_request
+    await self._writer.drain()
+  File "C:\Users\Shora\AppData\Roaming\uv\python\cpython-3.11.13-windows-x86_64-none\Lib\asyncio\streams.py", line 392, in drain
+    await self._protocol._drain_helper()
+  File "C:\Users\Shora\AppData\Roaming\uv\python\cpython-3.11.13-windows-x86_64-none\Lib\asyncio\streams.py", line 166, in _drain_helper
+    raise ConnectionResetError('Connection lost')
+ConnectionResetError: Connection lost
+2025-09-27 15:29:36,785 ERROR   wandb-AsyncioManager-main:16116 [asyncio_manager.py:fn_wrap_exceptions():183] Uncaught exception in run_soon callback.
+Traceback (most recent call last):
+  File "D:\Research\2dssp\.venv\Lib\site-packages\wandb\sdk\lib\asyncio_manager.py", line 181, in fn_wrap_exceptions
+    await fn()
+  File "D:\Research\2dssp\.venv\Lib\site-packages\wandb\sdk\lib\service\service_client.py", line 65, in _send_server_request
+    await self._writer.drain()
+  File "C:\Users\Shora\AppData\Roaming\uv\python\cpython-3.11.13-windows-x86_64-none\Lib\asyncio\streams.py", line 392, in drain
+    await self._protocol._drain_helper()
+  File "C:\Users\Shora\AppData\Roaming\uv\python\cpython-3.11.13-windows-x86_64-none\Lib\asyncio\streams.py", line 166, in _drain_helper
+    raise ConnectionResetError('Connection lost')
+ConnectionResetError: Connection lost
+2025-09-27 15:29:36,785 ERROR   wandb-AsyncioManager-main:16116 [asyncio_manager.py:fn_wrap_exceptions():183] Uncaught exception in run_soon callback.
+Traceback (most recent call last):
+  File "D:\Research\2dssp\.venv\Lib\site-packages\wandb\sdk\lib\asyncio_manager.py", line 181, in fn_wrap_exceptions
+    await fn()
+  File "D:\Research\2dssp\.venv\Lib\site-packages\wandb\sdk\lib\service\service_client.py", line 65, in _send_server_request
+    await self._writer.drain()
+  File "C:\Users\Shora\AppData\Roaming\uv\python\cpython-3.11.13-windows-x86_64-none\Lib\asyncio\streams.py", line 392, in drain
+    await self._protocol._drain_helper()
+  File "C:\Users\Shora\AppData\Roaming\uv\python\cpython-3.11.13-windows-x86_64-none\Lib\asyncio\streams.py", line 166, in _drain_helper
+    raise ConnectionResetError('Connection lost')
+ConnectionResetError: Connection lost
+2025-09-27 15:29:36,786 ERROR   wandb-AsyncioManager-main:16116 [asyncio_manager.py:fn_wrap_exceptions():183] Uncaught exception in run_soon callback.
+Traceback (most recent call last):
+  File "D:\Research\2dssp\.venv\Lib\site-packages\wandb\sdk\lib\asyncio_manager.py", line 181, in fn_wrap_exceptions
+    await fn()
+  File "D:\Research\2dssp\.venv\Lib\site-packages\wandb\sdk\lib\service\service_client.py", line 65, in _send_server_request
+    await self._writer.drain()
+  File "C:\Users\Shora\AppData\Roaming\uv\python\cpython-3.11.13-windows-x86_64-none\Lib\asyncio\streams.py", line 392, in drain
+    await self._protocol._drain_helper()
+  File "C:\Users\Shora\AppData\Roaming\uv\python\cpython-3.11.13-windows-x86_64-none\Lib\asyncio\streams.py", line 166, in _drain_helper
+    raise ConnectionResetError('Connection lost')
+ConnectionResetError: Connection lost
+2025-09-27 15:29:36,786 ERROR   wandb-AsyncioManager-main:16116 [asyncio_manager.py:fn_wrap_exceptions():183] Uncaught exception in run_soon callback.
+Traceback (most recent call last):
+  File "D:\Research\2dssp\.venv\Lib\site-packages\wandb\sdk\lib\asyncio_manager.py", line 181, in fn_wrap_exceptions
+    await fn()
+  File "D:\Research\2dssp\.venv\Lib\site-packages\wandb\sdk\lib\service\service_client.py", line 65, in _send_server_request
+    await self._writer.drain()
+  File "C:\Users\Shora\AppData\Roaming\uv\python\cpython-3.11.13-windows-x86_64-none\Lib\asyncio\streams.py", line 392, in drain
+    await self._protocol._drain_helper()
+  File "C:\Users\Shora\AppData\Roaming\uv\python\cpython-3.11.13-windows-x86_64-none\Lib\asyncio\streams.py", line 166, in _drain_helper
+    raise ConnectionResetError('Connection lost')
+ConnectionResetError: Connection lost
+2025-09-27 15:29:36,787 ERROR   wandb-AsyncioManager-main:16116 [asyncio_manager.py:fn_wrap_exceptions():183] Uncaught exception in run_soon callback.
+Traceback (most recent call last):
+  File "D:\Research\2dssp\.venv\Lib\site-packages\wandb\sdk\lib\asyncio_manager.py", line 181, in fn_wrap_exceptions
+    await fn()
+  File "D:\Research\2dssp\.venv\Lib\site-packages\wandb\sdk\lib\service\service_client.py", line 65, in _send_server_request
+    await self._writer.drain()
+  File "C:\Users\Shora\AppData\Roaming\uv\python\cpython-3.11.13-windows-x86_64-none\Lib\asyncio\streams.py", line 392, in drain
+    await self._protocol._drain_helper()
+  File "C:\Users\Shora\AppData\Roaming\uv\python\cpython-3.11.13-windows-x86_64-none\Lib\asyncio\streams.py", line 166, in _drain_helper
+    raise ConnectionResetError('Connection lost')
+ConnectionResetError: Connection lost

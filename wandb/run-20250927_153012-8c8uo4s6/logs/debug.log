@@ -1,0 +1,26 @@
+2025-09-27 15:30:12,576 INFO    MainThread:16748 [wandb_setup.py:_flush():81] Current SDK version is 0.22.0
+2025-09-27 15:30:12,577 INFO    MainThread:16748 [wandb_setup.py:_flush():81] Configure stats pid to 16748
+2025-09-27 15:30:12,577 INFO    MainThread:16748 [wandb_setup.py:_flush():81] Loading settings from C:\Users\Shora\.config\wandb\settings
+2025-09-27 15:30:12,577 INFO    MainThread:16748 [wandb_setup.py:_flush():81] Loading settings from D:\Research\2dssp\wandb\settings
+2025-09-27 15:30:12,577 INFO    MainThread:16748 [wandb_setup.py:_flush():81] Loading settings from environment variables
+2025-09-27 15:30:12,578 INFO    MainThread:16748 [wandb_init.py:setup_run_log_directory():686] Logging user logs to D:\Research\2dssp\wandb\run-20250927_153012-8c8uo4s6\logs\debug.log
+2025-09-27 15:30:12,578 INFO    MainThread:16748 [wandb_init.py:setup_run_log_directory():687] Logging internal logs to D:\Research\2dssp\wandb\run-20250927_153012-8c8uo4s6\logs\debug-internal.log
+2025-09-27 15:30:12,579 INFO    MainThread:16748 [wandb_init.py:init():813] calling init triggers
+2025-09-27 15:30:12,579 INFO    MainThread:16748 [wandb_init.py:init():818] wandb.init called with sweep_config: {}
+config: {'iterations': 20, 'n_ants': 8, 'n_workers': 8, 'alpha': 1.0, 'beta': 3.0, 'gamma': 1.0, 'lambda': 0.05, 'epsilon': 1.0, 'rho': 0.1, 'Q': 25.0, 'random_seed': 123, 'n_tiles': 100, 'tile_size': 5, 'enable_compaction': False, '_wandb': {}}
+2025-09-27 15:30:12,579 INFO    MainThread:16748 [wandb_init.py:init():861] starting backend
+2025-09-27 15:30:14,838 INFO    MainThread:16748 [wandb_init.py:init():864] sending inform_init request
+2025-09-27 15:30:14,859 INFO    MainThread:16748 [wandb_init.py:init():872] backend started and connected
+2025-09-27 15:30:14,861 INFO    MainThread:16748 [wandb_init.py:init():942] updated telemetry
+2025-09-27 15:30:14,927 INFO    MainThread:16748 [wandb_init.py:init():966] communicating run to backend with 90.0 second timeout
+2025-09-27 15:30:17,044 INFO    MainThread:16748 [wandb_init.py:init():1017] starting run threads in backend
+2025-09-27 15:30:17,108 INFO    MainThread:16748 [wandb_run.py:_console_start():2506] atexit reg
+2025-09-27 15:30:17,108 INFO    MainThread:16748 [wandb_run.py:_redirect():2354] redirect: wrap_raw
+2025-09-27 15:30:17,108 INFO    MainThread:16748 [wandb_run.py:_redirect():2423] Wrapping output streams.
+2025-09-27 15:30:17,108 INFO    MainThread:16748 [wandb_run.py:_redirect():2446] Redirects installed.
+2025-09-27 15:30:17,108 INFO    MainThread:16748 [wandb_init.py:init():1057] run started, returning control to user process
+2025-09-27 15:32:31,809 INFO    MainThread:16748 [wandb_run.py:_finish():2272] finishing run shoraaa-vnu/aco-2dssp/8c8uo4s6
+2025-09-27 15:32:31,810 INFO    MainThread:16748 [wandb_run.py:_atexit_cleanup():2471] got exitcode: 0
+2025-09-27 15:32:31,810 INFO    MainThread:16748 [wandb_run.py:_restore():2453] restore
+2025-09-27 15:32:31,811 INFO    MainThread:16748 [wandb_run.py:_restore():2459] restore done
+2025-09-27 15:32:33,139 INFO    MainThread:16748 [wandb_run.py:_footer_sync_info():3867] logging synced files

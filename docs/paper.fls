@@ -215,6 +215,8 @@ INPUT d:/texlive/2025/texmf-dist/fonts/tfm/public/cm/cmss8.tfm
 INPUT d:/texlive/2025/texmf-dist/fonts/tfm/public/cm/cmss8.tfm
 INPUT d:/texlive/2025/texmf-dist/fonts/tfm/jknappen/ec/tcrm1095.tfm
 INPUT d:/texlive/2025/texmf-dist/fonts/tfm/public/cm/cmcsc10.tfm
+INPUT d:/texlive/2025/texmf-dist/fonts/tfm/public/cm/cmcsc10.tfm
+INPUT d:/texlive/2025/texmf-dist/fonts/tfm/public/cm/cmcsc10.tfm
 INPUT d:/texlive/2025/texmf-dist/fonts/enc/dvips/cm-super/cm-super-ts1.enc
 INPUT paper.aux
 INPUT ./paper.out

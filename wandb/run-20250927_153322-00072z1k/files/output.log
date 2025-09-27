@@ -1,0 +1,58 @@
+[ACO Performance] Starting ACO with 20 iterations, 8 ants, 8 workers
+[ACO Performance] Starting overlap precomputation for 100 tiles...
+[ACO Performance] Overlap precomputation completed in 5.225s
+[ACO Performance] - Overlap checks performed: 801,900
+[ACO Performance] - Valid overlaps found: 66,060
+[ACO Performance] - Efficiency: 153487 checks/sec
+[ACO Performance] Preprocessing completed in 5.272s
+[ACO Performance] - Pheromone matrix size: 66,060 edges
+ACO Iterations:  40%|█████████████████████████████████▏                                                 | 8/20 [00:50<01:15,  6.28s/iter]
+[ACO Performance] Iter   1:  8/8 valid, best_m=10, iter_best=10, time=11.403s (avg=11.403s)
+[ACO Performance] Iter   2:  8/8 valid, best_m=10, iter_best=10, time=7.404s (avg=9.403s)
+[ACO Performance] Iter   3:  8/8 valid, best_m=10, iter_best=10, time=4.834s (avg=7.880s)
+[ACO Performance] Iter   4:  8/8 valid, best_m=10, iter_best=10, time=4.464s (avg=7.026s)
+[ACO Performance] Iter   5:  8/8 valid, best_m=10, iter_best=10, time=4.461s (avg=6.513s)
+[ACO Performance] Iter   6:  8/8 valid, best_m=10, iter_best=10, time=4.625s (avg=6.198s)
+[ACO Performance] Iter   7:  8/8 valid, best_m=10, iter_best=10, time=4.537s (avg=5.961s)
+[ACO Performance] Iter   8:  8/8 valid, best_m=10, iter_best=10, time=4.723s (avg=5.806s)
+Traceback (most recent call last):
+  File "D:\Research\2dssp\aco_all.py", line 394, in solve_with_aco
+    results = list(pool.map(_build_ant_solution_worker, seeds, [tau_snapshot]*params.n_ants))
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Shora\AppData\Roaming\uv\python\cpython-3.11.13-windows-x86_64-none\Lib\concurrent\futures\process.py", line 620, in _chain_from_iterable_of_lists
+    for element in iterable:
+  File "C:\Users\Shora\AppData\Roaming\uv\python\cpython-3.11.13-windows-x86_64-none\Lib\concurrent\futures\_base.py", line 619, in result_iterator
+    yield _result_or_cancel(fs.pop())
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Shora\AppData\Roaming\uv\python\cpython-3.11.13-windows-x86_64-none\Lib\concurrent\futures\_base.py", line 317, in _result_or_cancel
+    return fut.result(timeout)
+           ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Shora\AppData\Roaming\uv\python\cpython-3.11.13-windows-x86_64-none\Lib\concurrent\futures\_base.py", line 451, in result
+    self._condition.wait(timeout)
+  File "C:\Users\Shora\AppData\Roaming\uv\python\cpython-3.11.13-windows-x86_64-none\Lib\threading.py", line 327, in wait
+    waiter.acquire()
+KeyboardInterrupt
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "D:\Research\2dssp\benchmark.py", line 167, in <module>
+    main()
+  File "D:\Research\2dssp\benchmark.py", line 138, in main
+    r = run_once(data, ants=args.ants, iters=args.iters, K=args.K, compaction=args.compaction, seed=args.seed)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Research\2dssp\benchmark.py", line 77, in run_once
+    aco_res = solve_with_aco(tiles_list, aco_params)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Research\2dssp\aco_all.py", line 384, in solve_with_aco
+    with ProcessPoolExecutor(max_workers=params.n_workers, initializer=_init_worker,
+  File "C:\Users\Shora\AppData\Roaming\uv\python\cpython-3.11.13-windows-x86_64-none\Lib\concurrent\futures\_base.py", line 647, in __exit__
+    self.shutdown(wait=True)
+  File "C:\Users\Shora\AppData\Roaming\uv\python\cpython-3.11.13-windows-x86_64-none\Lib\concurrent\futures\process.py", line 851, in shutdown
+    self._executor_manager_thread.join()
+  File "C:\Users\Shora\AppData\Roaming\uv\python\cpython-3.11.13-windows-x86_64-none\Lib\threading.py", line 1119, in join
+    self._wait_for_tstate_lock()
+  File "C:\Users\Shora\AppData\Roaming\uv\python\cpython-3.11.13-windows-x86_64-none\Lib\threading.py", line 1139, in _wait_for_tstate_lock
+    if lock.acquire(block, timeout):
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyboardInterrupt

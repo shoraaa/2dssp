@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.28 (TeX Live 2025) (preloaded format=pdflatex 2025.9.17)  24 SEP 2025 16:47
+This is pdfTeX, Version 3.141592653-2.6-1.40.28 (TeX Live 2025) (preloaded format=pdflatex 2025.9.17)  24 SEP 2025 18:57
 entering extended mode
  restricted \write18 enabled.
  file:line:error style messages enabled.
@@ -502,35 +502,32 @@ Package microtype Info: Loading generic protrusion settings for font family
 [2]
 
 [3]
-Underfull \hbox (badness 1715) in paragraph at lines 170--171
-[] \OT1/cmr/m/n/10.95 (+20) Com-pute $\OML/cmm/m/it/10.95 H \OT1/cmr/m/n/10.95 (+20) = [][] \OML/cmm/m/it/10.95 ^^Q\OT1/cmr/m/n/10.95 (+20) (\OML/cmm/m/it/10.95 u; v; \OT1/cmr/m/n/10.95 (+20) ^^A[])$, $\OML/cmm/m/it/10.95 T \OT1/cmr/m/n/10.95 (+20) = [][] \OML/cmm/m/it/10.95 ^^\\OT1/cmr/m/n/10.95 (+20) [\OML/cmm/m/it/10.95 u; v; \OT1/cmr/m/n/10.95 (+20) ^^A[]]$, $\OML/cmm/m/it/10.95 c \OT1/cmr/m/n/10.95 (+20) =
- []
-
-
 
 [4{d:/texlive/2025/texmf-dist/fonts/enc/dvips/cm-super/cm-super-ts1.enc}]
 
-[5] (./paper.aux)
+[5]
+
+[6] (./paper.aux)
  ***********
 LaTeX2e <2025-06-01> patch level 1
 L3 programming layer <2025-08-13>
  ***********
 Package rerunfilecheck Info: File `paper.out' has not changed.
-(rerunfilecheck)             Checksum: 9AAF0A8BA1FCE9A33004F56BEC286810;2314.
+(rerunfilecheck)             Checksum: 405863035043884DAA20A6073F05937D;2556.
  ) 
 Here is how much of TeX's memory you used:
- 14574 strings out of 467800
- 225253 string characters out of 5436061
+ 14585 strings out of 467800
+ 225417 string characters out of 5436061
  693681 words of memory out of 5000000
- 42875 multiletter control sequences out of 15000+600000
- 642346 words of font info for 148 fonts, out of 8000000 for 9000
+ 42879 multiletter control sequences out of 15000+600000
+ 643152 words of font info for 153 fonts, out of 8000000 for 9000
  1141 hyphenation exceptions out of 8191
- 75i,12n,79p,1025b,560s stack positions out of 10000i,1000n,20000p,200000b,200000s
+ 75i,12n,79p,1025b,462s stack positions out of 10000i,1000n,20000p,200000b,200000s
 <d:/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx10.pfb><d:/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx12.pfb><d:/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmcsc10.pfb><d:/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmex10.pfb><d:/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi10.pfb><d:/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi8.pfb><d:/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmr10.pfb><d:/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmr12.pfb><d:/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmr17.pfb><d:/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmr8.pfb><d:/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmr9.pfb><d:/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmss10.pfb><d:/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy10.pfb><d:/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy6.pfb><d:/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy8.pfb><d:/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/cm/cmti10.pfb><d:/texlive/2025/texmf-dist/fonts/type1/public/amsfonts/symbols/msbm10.pfb><d:/texlive/2025/texmf-dist/fonts/type1/public/cm-super/sfrm1095.pfb>
-Output written on paper.pdf (5 pages, 231349 bytes).
+Output written on paper.pdf (6 pages, 232834 bytes).
 PDF statistics:
- 201 PDF objects out of 1000 (max. 8388607)
- 156 compressed objects within 2 object streams
- 35 named destinations out of 1000 (max. 500000)
- 41073 words of extra memory for PDF output out of 42996 (max. 10000000)
+ 205 PDF objects out of 1000 (max. 8388607)
+ 159 compressed objects within 2 object streams
+ 36 named destinations out of 1000 (max. 500000)
+ 45169 words of extra memory for PDF output out of 51595 (max. 10000000)
 

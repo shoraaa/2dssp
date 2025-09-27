@@ -1,0 +1,36 @@
+[ACO Performance] Starting ACO with 20 iterations, 8 ants, 8 workers
+[ACO Performance] Starting overlap precomputation for 30 tiles...
+[ACO Performance] Overlap precomputation completed in 0.467s
+[ACO Performance] - Overlap checks performed: 70,470
+[ACO Performance] - Valid overlaps found: 5,870
+[ACO Performance] - Efficiency: 150945 checks/sec
+[ACO Performance] Preprocessing completed in 0.478s
+[ACO Performance] - Pheromone matrix size: 5,870 edges
+ACO Iterations:  20%|████████████████▌                                                                  | 4/20 [00:12<00:44,  2.75s/iter]Traceback (most recent call last):
+[ACO Performance] Iter   1:  8/8 valid, best_m=10, iter_best=10, time=5.875s (avg=5.875s)
+[ACO Performance] Iter   2:  8/8 valid, best_m=10, iter_best=10, time=2.213s (avg=4.044s)
+[ACO Performance] Iter   3:  8/8 valid, best_m=10, iter_best=10, time=2.281s (avg=3.456s)
+[ACO Performance] Iter   4:  8/8 valid, best_m=10, iter_best=10, time=2.264s (avg=3.158s)
+  File "C:\Users\Shora\AppData\Roaming\uv\python\cpython-3.11.13-windows-x86_64-none\Lib\multiprocessing\queues.py", line 246, in _feed
+    send_bytes(obj)
+  File "C:\Users\Shora\AppData\Roaming\uv\python\cpython-3.11.13-windows-x86_64-none\Lib\multiprocessing\connection.py", line 184, in send_bytes
+    self._check_closed()
+  File "C:\Users\Shora\AppData\Roaming\uv\python\cpython-3.11.13-windows-x86_64-none\Lib\multiprocessing\connection.py", line 137, in _check_closed
+    raise OSError("handle is closed")
+OSError: handle is closed
+Traceback (most recent call last):
+  File "C:\Users\Shora\AppData\Roaming\uv\python\cpython-3.11.13-windows-x86_64-none\Lib\multiprocessing\queues.py", line 246, in _feed
+    send_bytes(obj)
+  File "C:\Users\Shora\AppData\Roaming\uv\python\cpython-3.11.13-windows-x86_64-none\Lib\multiprocessing\connection.py", line 184, in send_bytes
+    self._check_closed()
+  File "C:\Users\Shora\AppData\Roaming\uv\python\cpython-3.11.13-windows-x86_64-none\Lib\multiprocessing\connection.py", line 137, in _check_closed
+    raise OSError("handle is closed")
+OSError: handle is closed
+Traceback (most recent call last):
+  File "C:\Users\Shora\AppData\Roaming\uv\python\cpython-3.11.13-windows-x86_64-none\Lib\multiprocessing\queues.py", line 246, in _feed
+    send_bytes(obj)
+  File "C:\Users\Shora\AppData\Roaming\uv\python\cpython-3.11.13-windows-x86_64-none\Lib\multiprocessing\connection.py", line 184, in send_bytes
+    self._check_closed()
+  File "C:\Users\Shora\AppData\Roaming\uv\python\cpython-3.11.13-windows-x86_64-none\Lib\multiprocessing\connection.py", line 137, in _check_closed
+    raise OSError("handle is closed")
+OSError: handle is closed

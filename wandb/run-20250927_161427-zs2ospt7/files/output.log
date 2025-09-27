@@ -1,0 +1,35 @@
+[ACO Performance] Starting ACO with 20 iterations, 8 ants, 8 workers
+[ACO Performance] Starting overlap precomputation for 200 tiles...
+[ACO Performance] Overlap precomputation completed in 12.882s
+[ACO Performance] - Overlap checks performed: 1,950,200
+[ACO Performance] - Valid overlaps found: 107,070
+[ACO Performance] - Efficiency: 151385 checks/sec
+[ACO Performance] Preprocessing completed in 12.985s
+[ACO Performance] - Pheromone matrix size: 107,070 edges
+ACO Iterations: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [08:55<00:00, 26.79s/iter]
+[ACO Performance] Iter   1:  8/8 valid, best_m=51, iter_best=51, time=35.544s (avg=35.544s)
+[ACO Performance] Iter   2:  8/8 valid, best_m=50, iter_best=50, time=29.732s (avg=32.638s)
+[ACO Performance] Iter   3:  8/8 valid, best_m=50, iter_best=53, time=26.232s (avg=30.503s)
+[ACO Performance] Iter   4:  8/8 valid, best_m=47, iter_best=47, time=27.188s (avg=29.674s)
+[ACO Performance] Iter   5:  8/8 valid, best_m=47, iter_best=49, time=22.667s (avg=28.272s)
+[ACO Performance] Iter   6:  8/8 valid, best_m=44, iter_best=44, time=26.273s (avg=27.939s)
+[ACO Performance] Iter   7:  8/8 valid, best_m=44, iter_best=44, time=26.097s (avg=27.676s)
+[ACO Performance] Iter   8:  8/8 valid, best_m=44, iter_best=45, time=25.954s (avg=27.461s)
+[ACO Performance] Iter   9:  8/8 valid, best_m=41, iter_best=41, time=23.937s (avg=27.069s)
+[ACO Performance] Iter  10:  8/8 valid, best_m=41, iter_best=45, time=24.397s (avg=26.802s)
+[ACO Performance] Iter  11:  8/8 valid, best_m=41, iter_best=44, time=24.293s (avg=25.677s)
+[ACO Performance] Iter  12:  8/8 valid, best_m=41, iter_best=43, time=27.033s (avg=25.407s)
+[ACO Performance] Iter  13:  8/8 valid, best_m=41, iter_best=43, time=28.294s (avg=25.613s)
+[ACO Performance] Iter  14:  8/8 valid, best_m=41, iter_best=43, time=31.609s (avg=26.055s)
+[ACO Performance] Iter  15:  8/8 valid, best_m=40, iter_best=40, time=29.472s (avg=26.736s)
+[ACO Performance] Iter  16:  8/8 valid, best_m=38, iter_best=38, time=24.830s (avg=26.591s)
+[ACO Performance] Iter  17:  8/8 valid, best_m=38, iter_best=40, time=24.425s (avg=26.424s)
+[ACO Performance] Iter  18:  8/8 valid, best_m=38, iter_best=41, time=26.316s (avg=26.460s)
+[ACO Performance] Iter  19:  8/8 valid, best_m=38, iter_best=41, time=24.994s (avg=26.566s)
+[ACO Performance] Iter  20:  8/8 valid, best_m=38, iter_best=41, time=26.538s (avg=26.780s)
+
+[ACO Performance] === PERFORMANCE SUMMARY ===
+[ACO Performance] Total solve time: 549.664s
+[ACO Performance] Final best solution: m=38
+[ACO Performance] Logged 7 improvements to wandb
+[ACO Performance] ========================

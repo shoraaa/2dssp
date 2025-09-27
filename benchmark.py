@@ -3,16 +3,15 @@ import argparse, os, json, time, glob
 import numpy as np
 from pathlib import Path
 
+
+from aco import solve_with_aco, ACOParams
+
 try:
-    from aco import solve_with_aco, ACOParams
-except ImportError as e:
-    from aco import solve_with_aco, ACOParams
-try:
-    from greedy_overlap_insertion import greedy_place_once, GreedyParams
+    from greedy import greedy_place_once, GreedyParams
 except ImportError as e:
     raise
 
-from tile_generators import generate_datasets
+from generator import generate_datasets
 
 def build_gt_canvas_from_tiles(tiles, placements, bbox):
     n = tiles.shape[1]
@@ -107,7 +106,7 @@ def main():
     ap.add_argument("--alphabet", type=int, default=2)
     ap.add_argument("--canvas-m", type=int, default=None)
     ap.add_argument("--min-overlap", type=int, default=None)
-    ap.add_argument("--count", type=int, default=5)
+    ap.add_argument("--count", type=int, default=1)
     ap.add_argument("--seed", type=int, default=123)
     ap.add_argument("--prefix", type=str, default="ds")
     ap.add_argument("--ants", type=int, default=10)
@@ -141,6 +140,10 @@ def main():
             print(f"[skip] {p}")
             continue
         ok += 1
+        
+        # Print costs for this instance
+        print(f"[{os.path.basename(p)}] GT: {r['m_gt']}, ACO: {r['m_aco']}, Greedy: {r['m_greedy']}")
+        
         acc["m_gt"] += r["m_gt"]; acc["m_aco"] += r["m_aco"]; acc["m_g"] += r["m_greedy"]
         acc["aco_err"] += r["aco_err"]; acc["g_err"] += r["greedy_err"]
         acc["aco_time"] += r["aco_time"]; acc["g_time"] += r["greedy_time"]
