@@ -347,37 +347,3 @@ def build_model_example(
     return NeuralSolver(c_occ=c_occ, d_tile=d_tile, d_model=d_model, cand_feat_dim=cand_feat_dim)
 
 
-# ----------------------------
-# HOW TO INTEGRATE WITH YOUR PIPELINE
-# ----------------------------
-#
-# 1) Precompute tile embeddings (optional but recommended)
-#    - Use TileCNN on your (C_sym, n, n) tiles; cache per tile id.
-#    - During a step, assemble tiles_left (B, M, d_tile) by indexing into cache.
-#
-# 2) Build StepBatch from your candidate generator:
-#    - occ: crop around bbox; channels = symbol one-hots + empty (C_occ = |Σ|+1)
-#    - tiles_left: from your cache; tiles_left_mask indicates valid slots
-#    - cand_feats: per-candidate features, e.g.:
-#        [sum_overlap_H, pheromone_Tsum, delta_m_if_place, dx_norm, dy_norm,
-#         touches_left, touches_right, touches_up, touches_down, is_adjacency, ...]
-#    - cand_mask: feasibility mask (True where candidate is legal)
-#    - cand_tile_idx: for each candidate, which tile id it places (index into tiles_left row)
-#    - expert_action (for IL): the chosen candidate index from your oracle/ACO/MILP
-#
-# 3) Train with train_imitation() first. Later, switch to PPO:
-#    - Roll out your environment using the model policy (sample or top-1).
-#    - Compute advantages from episode rewards (e.g., -Δm per step, final compactness).
-#    - Use ppo_loss() with stored old_logp, actions, advantages; plus value_loss().
-#
-# 4) Inference:
-#    - At each step, call model to get masked logits; pick argmax or sample.
-#    - For higher quality, use beam_search_step() and commit the best branch
-#      (maintain multiple env clones if you want full beam through the episode).
-#
-# 5) Optional: add a tiny GNN over placed tiles
-#    - Create node feats (tile emb, degree, boundary exposure), edge feats (dx,dy,ov).
-#    - Pool to a layout embedding and fuse into e_state (concat with raster/set encodings).
-#
-# That’s it — plug your generator & environment into StepBatch, and this model will act as
-# the neural policy/value for your solver.

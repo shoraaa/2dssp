@@ -1,4 +1,3 @@
-# env_generator.py (can live in the same file as the model)
 from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict, Tuple, List, Optional, Any
