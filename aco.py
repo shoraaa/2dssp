@@ -46,6 +46,7 @@ class ACOParams:
     perimeter_search_limit: int = 64
     enable_compaction: bool = False
     n_workers: int = 8
+    enable_wandb: bool = False
 
 class TopKEntry:
     __slots__ = ("dx","dy","ov")
@@ -53,12 +54,12 @@ class TopKEntry:
         self.dx=dx; self.dy=dy; self.ov=ov
 
 # ---------- NEW: compute all overlaps (no TopK) ----------
-def compute_pairwise_overlaps(tiles: List[np.ndarray], n: int):
+def compute_pairwise_overlaps(tiles: List[np.ndarray], n: int, enable_wandb: bool = False):
     """Return, for every ordered pair (u,v), the full list of (dx,dy,ov) where
     the two n×n tiles exactly agree on their overlapping region when v is
     placed at (ux+dx, uy+dy) relative to u.
     """
-    print(f"[ACO Performance] Starting overlap precomputation for {len(tiles)} tiles...")
+    # print(f"[ACO Performance] Starting overlap precomputation for {len(tiles)} tiles...")
     start_time = time.time()
     
     pre_all: Dict[Tuple[int,int], List[Tuple[int,int,int]]] = {}
@@ -106,18 +107,19 @@ def compute_pairwise_overlaps(tiles: List[np.ndarray], n: int):
     total_time = end_time - start_time
     
     # Log overlap precomputation metrics to wandb
-    wandb.log({
-        "overlap_precomp/time": total_time,
-        "overlap_precomp/overlap_checks": overlap_checks,
-        "overlap_precomp/valid_overlaps": valid_overlaps,
-        "overlap_precomp/efficiency_checks_per_sec": overlap_checks / total_time if total_time > 0 else 0,
-        "overlap_precomp/validity_rate": valid_overlaps / overlap_checks if overlap_checks > 0 else 0
-    })
+    if enable_wandb:
+        wandb.log({
+            "overlap_precomp/time": total_time,
+            "overlap_precomp/overlap_checks": overlap_checks,
+            "overlap_precomp/valid_overlaps": valid_overlaps,
+            "overlap_precomp/efficiency_checks_per_sec": overlap_checks / total_time if total_time > 0 else 0,
+            "overlap_precomp/validity_rate": valid_overlaps / overlap_checks if overlap_checks > 0 else 0
+        })
     
-    print(f"[ACO Performance] Overlap precomputation completed in {total_time:.3f}s")
-    print(f"[ACO Performance] - Overlap checks performed: {overlap_checks:,}")
-    print(f"[ACO Performance] - Valid overlaps found: {valid_overlaps:,}")
-    print(f"[ACO Performance] - Efficiency: {overlap_checks/total_time:.0f} checks/sec")
+    # print(f"[ACO Performance] Overlap precomputation completed in {total_time:.3f}s")
+    # print(f"[ACO Performance] - Overlap checks performed: {overlap_checks:,}")
+    # print(f"[ACO Performance] - Valid overlaps found: {valid_overlaps:,}")
+    # print(f"[ACO Performance] - Efficiency: {overlap_checks/total_time:.0f} checks/sec")
     
     return pre_all
 
@@ -324,29 +326,30 @@ def _build_ant_solution_worker(seed:int, tau_snapshot: np.ndarray):
     return placements, m, parent_edges
 
 def solve_with_aco(tiles: List[np.ndarray], params: ACOParams) -> Dict[str,Any]:
-    # Initialize wandb run
-    wandb.init(
-        project="aco-2dssp",
-        config={
-            "iterations": params.iterations,
-            "n_ants": params.n_ants,
-            "n_workers": params.n_workers,
-            "alpha": params.alpha,
-            "beta": params.beta,
-            "gamma": params.gamma,
-            "lambda": params.lam,
-            "epsilon": params.epsilon,
-            "rho": params.rho,
-            "Q": params.Q,
-            "random_seed": params.random_seed,
-            "n_tiles": len(tiles),
-            "tile_size": tiles[0].shape[0] if tiles else None,
-            "enable_compaction": params.enable_compaction
-        },
-        tags=["aco", "2dssp", "optimization"]
-    )
+    # Initialize wandb run only if enabled
+    if params.enable_wandb:
+        wandb.init(
+            project="aco-2dssp",
+            config={
+                "iterations": params.iterations,
+                "n_ants": params.n_ants,
+                "n_workers": params.n_workers,
+                "alpha": params.alpha,
+                "beta": params.beta,
+                "gamma": params.gamma,
+                "lambda": params.lam,
+                "epsilon": params.epsilon,
+                "rho": params.rho,
+                "Q": params.Q,
+                "random_seed": params.random_seed,
+                "n_tiles": len(tiles),
+                "tile_size": tiles[0].shape[0] if tiles else None,
+                "enable_compaction": params.enable_compaction
+            },
+            tags=["aco", "2dssp", "optimization"]
+        )
     
-    print(f"[ACO Performance] Starting ACO with {params.iterations} iterations, {params.n_ants} ants, {params.n_workers} workers")
+    # print(f"[ACO Performance] Starting ACO with {params.iterations} iterations, {params.n_ants} ants, {params.n_workers} workers")
     total_start_time = time.time()
     
     if params.random_seed is not None:
@@ -356,22 +359,23 @@ def solve_with_aco(tiles: List[np.ndarray], params: ACOParams) -> Dict[str,Any]:
 
     # PRECOMPUTE: all overlaps (no TopK)
     precomp_start = time.time()
-    pre_all = compute_pairwise_overlaps(tiles, n)
+    pre_all = compute_pairwise_overlaps(tiles, n, params.enable_wandb)
     idmap, ov_arr = _idmap_from_pre(pre_all)
     M = len(ov_arr)
     tau = np.ones(M, dtype=np.float64)
     precomp_time = time.time() - precomp_start
 
     # Log preprocessing metrics
-    wandb.log({
-        "preprocessing/time": precomp_time,
-        "preprocessing/pheromone_matrix_size": M,
-        "preprocessing/total_overlaps": len([ov for overlaps in pre_all.values() for ov in overlaps]),
-        "preprocessing/avg_overlaps_per_tile_pair": len([ov for overlaps in pre_all.values() for ov in overlaps]) / (T * T) if T > 0 else 0
-    })
+    if params.enable_wandb:
+        wandb.log({
+            "preprocessing/time": precomp_time,
+            "preprocessing/pheromone_matrix_size": M,
+            "preprocessing/total_overlaps": len([ov for overlaps in pre_all.values() for ov in overlaps]),
+            "preprocessing/avg_overlaps_per_tile_pair": len([ov for overlaps in pre_all.values() for ov in overlaps]) / (T * T) if T > 0 else 0
+        })
     
-    print(f"[ACO Performance] Preprocessing completed in {precomp_time:.3f}s")
-    print(f"[ACO Performance] - Pheromone matrix size: {M:,} edges")
+    # print(f"[ACO Performance] Preprocessing completed in {precomp_time:.3f}s")
+    # print(f"[ACO Performance] - Pheromone matrix size: {M:,} edges")
 
     best_layout=None; best_m=10**9
     
@@ -440,26 +444,27 @@ def solve_with_aco(tiles: List[np.ndarray], params: ACOParams) -> Dict[str,Any]:
             
             # Log iteration metrics to wandb
             valid_ants = len(valid)
-            wandb.log({
-                "iteration": it,
-                "timing/iteration_time": iter_time,
-                "timing/ant_solution_time": ant_time,
-                "timing/pheromone_update_time": pheromone_time,
-                "ants/valid_ants": valid_ants,
-                "ants/valid_ant_ratio": valid_ants / params.n_ants,
-                "solution/iter_best_m": iter_best_m if iter_best_m != float('inf') else None,
-                "solution/global_best_m": best_m if best_m != 10**9 else None,
-                "pheromone/avg_tau": float(np.mean(tau)),
-                "pheromone/max_tau": float(np.max(tau)),
-                "pheromone/min_tau": float(np.min(tau))
-            })
+            if params.enable_wandb:
+                wandb.log({
+                    "iteration": it,
+                    "timing/iteration_time": iter_time,
+                    "timing/ant_solution_time": ant_time,
+                    "timing/pheromone_update_time": pheromone_time,
+                    "ants/valid_ants": valid_ants,
+                    "ants/valid_ant_ratio": valid_ants / params.n_ants,
+                    "solution/iter_best_m": iter_best_m if iter_best_m != float('inf') else None,
+                    "solution/global_best_m": best_m if best_m != 10**9 else None,
+                    "pheromone/avg_tau": float(np.mean(tau)),
+                    "pheromone/max_tau": float(np.max(tau)),
+                    "pheromone/min_tau": float(np.min(tau))
+                })
             
             # Log progress every 10 iterations or if significant improvement
             if (it + 1) % 10 == 0 or (valid and iter_best_m < best_m * 1.1):
                 avg_iter_time = sum(iteration_times[-10:]) / min(10, len(iteration_times))
-                print(f"[ACO Performance] Iter {it+1:3d}: {valid_ants:2d}/{params.n_ants} valid, "
-                      f"best_m={best_m}, iter_best={iter_best_m if valid else 'N/A'}, "
-                      f"time={iter_time:.3f}s (avg={avg_iter_time:.3f}s)")
+                # print(f"[ACO Performance] Iter {it+1:3d}: {valid_ants:2d}/{params.n_ants} valid, "
+                    #   f"best_m={best_m}, iter_best={iter_best_m if valid else 'N/A'}, "
+                    #   f"time={iter_time:.3f}s (avg={avg_iter_time:.3f}s)")
 
     total_time = time.time() - total_start_time
     
@@ -495,26 +500,29 @@ def solve_with_aco(tiles: List[np.ndarray], params: ACOParams) -> Dict[str,Any]:
         })
     
     # Log improvement timeline
-    for i, (iter_num, m_value, timestamp) in enumerate(best_improvements):
-        wandb.log({
-            f"improvements/improvement_{i}_iteration": iter_num,
-            f"improvements/improvement_{i}_m_value": m_value,
-            f"improvements/improvement_{i}_timestamp": timestamp
-        })
-    
-    wandb.log(summary_metrics)
+    if params.enable_wandb:
+        for i, (iter_num, m_value, timestamp) in enumerate(best_improvements):
+            wandb.log({
+                f"improvements/improvement_{i}_iteration": iter_num,
+                f"improvements/improvement_{i}_m_value": m_value,
+                f"improvements/improvement_{i}_timestamp": timestamp
+            })
+        
+        wandb.log(summary_metrics)
     
     # Print console summary (reduced)
-    print(f"\n[ACO Performance] === PERFORMANCE SUMMARY ===")
-    print(f"[ACO Performance] Total solve time: {total_time:.3f}s")
-    print(f"[ACO Performance] Final best solution: m={best_m}")
-    print(f"[ACO Performance] Logged {len(best_improvements)} improvements to wandb")
-    print(f"[ACO Performance] ========================\n")
+    # print(f"\n[ACO Performance] === PERFORMANCE SUMMARY ===")
+    # print(f"[ACO Performance] Total solve time: {total_time:.3f}s")
+    # print(f"[ACO Performance] Final best solution: m={best_m}")
+    # if params.enable_wandb:
+    #     print(f"[ACO Performance] Logged {len(best_improvements)} improvements to wandb")
+    # print(f"[ACO Performance] ========================\n")
 
     if best_layout is None:
         # Log failure and finish run
-        wandb.log({"summary/status": "failed"})
-        wandb.finish()
+        if params.enable_wandb:
+            wandb.log({"summary/status": "failed"})
+            wandb.finish()
         return {"status":"failed","reason":"No layout constructed","best_m":None}
     
     # Log success metrics
@@ -528,14 +536,15 @@ def solve_with_aco(tiles: List[np.ndarray], params: ACOParams) -> Dict[str,Any]:
     for (X,Y),val in occ.items():
         canvas[Y - ymin, X - xmin] = val
     
-    wandb.log({
-        "summary/status": "success",
-        "summary/final_canvas_width": W,
-        "summary/final_canvas_height": H,
-        "summary/canvas_area": W * H
-    })
+    if params.enable_wandb:
+        wandb.log({
+            "summary/status": "success",
+            "summary/final_canvas_width": W,
+            "summary/final_canvas_height": H,
+            "summary/canvas_area": W * H
+        })
     
-    # Finish wandb run
-    wandb.finish()
+        # Finish wandb run
+        wandb.finish()
     
     return {"status":"ok","best_m":m,"bbox":bbox,"placements":best_layout,"canvas":canvas}

@@ -149,8 +149,8 @@ def exact_bruteforce_min_canvas(
 
     def dfs():
         nonlocal best_m, best_pl, occ, placements, bbox, start
-        if time_limit is not None and (time.time() - start) > time_limit:
-            return
+        # if time_limit is not None and (time.time() - start) > time_limit:
+        #     return
         if len(placements) == T:
             xmin,xmax,ymin,ymax = bbox
             m = max(xmax-xmin+1, ymax-ymin+1)
@@ -212,8 +212,8 @@ def exact_bruteforce_min_canvas(
                 del placements[v]
                 _remove_occ(tiles[v], x, y, occ)
                 bbox = old_bbox
-                if time_limit is not None and (time.time() - start) > time_limit:
-                    return
+                # if time_limit is not None and (time.time() - start) > time_limit:
+                #     return
 
     dfs()
 

@@ -25,7 +25,7 @@ from env import (
     build_step_batch_from_env,
     layout_bbox,
 )
-from neural_solver import NeuralSolver, TileCNN
+from net import NeuralSolver, TileCNN
 
 def load_dataset(npz_path: str):
     d = np.load(npz_path, allow_pickle=False)

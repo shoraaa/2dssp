@@ -1,0 +1,40 @@
+2025-09-28 20:59:54,353 - INFO - Using device: cuda
+2025-09-28 20:59:54,362 - INFO - Set random seed: 0
+2025-09-28 20:59:54,627 - INFO - Model parameters: 607,651
+2025-09-28 20:59:55,727 - INFO - Optimizer: AdamW(lr=0.0003, weight_decay=0.0001)
+2025-09-28 20:59:55,728 - INFO - Training Configuration:
+2025-09-28 20:59:55,728 - INFO -   Problem: T=24, n=6, alphabet=8
+2025-09-28 20:59:55,728 - INFO -   Training: epochs=50, episodes_per_epoch=256
+2025-09-28 20:59:55,728 - INFO -   Learning: lr=0.0003, gamma=0.99, entropy_coef=0.01
+2025-09-28 20:59:55,728 - INFO -   Rewards: alpha_overlap=0.05, beta_disc=0.0
+2025-09-28 20:59:55,728 - INFO -   Evaluation: every 5 epochs, 16 episodes
+2025-09-28 21:02:03,784 - INFO - Using device: cuda
+2025-09-28 21:02:03,795 - INFO - Set random seed: 0
+2025-09-28 21:02:04,090 - INFO - Model parameters: 605,923
+2025-09-28 21:02:05,268 - INFO - Optimizer: AdamW(lr=0.0003, weight_decay=0.0001)
+2025-09-28 21:02:05,268 - INFO - Training Configuration:
+2025-09-28 21:02:05,268 - INFO -   Problem: T=30, n=3, alphabet=2
+2025-09-28 21:02:05,268 - INFO -   Training: epochs=50, episodes_per_epoch=128
+2025-09-28 21:02:05,268 - INFO -   Learning: lr=0.0003, gamma=0.99, entropy_coef=0.01
+2025-09-28 21:02:05,268 - INFO -   Rewards: alpha_overlap=0.05, beta_disc=0.0
+2025-09-28 21:02:05,268 - INFO -   Evaluation: every 5 epochs, 16 episodes
+2025-09-28 21:02:53,188 - INFO - Using device: cuda
+2025-09-28 21:02:53,199 - INFO - Set random seed: 0
+2025-09-28 21:02:53,462 - INFO - Model parameters: 605,923
+2025-09-28 21:02:54,549 - INFO - Optimizer: AdamW(lr=0.0003, weight_decay=0.0001)
+2025-09-28 21:02:54,549 - INFO - Training Configuration:
+2025-09-28 21:02:54,549 - INFO -   Problem: T=30, n=4, alphabet=2
+2025-09-28 21:02:54,549 - INFO -   Training: epochs=50, episodes_per_epoch=128
+2025-09-28 21:02:54,550 - INFO -   Learning: lr=0.0003, gamma=0.99, entropy_coef=0.01
+2025-09-28 21:02:54,550 - INFO -   Rewards: alpha_overlap=0.05, beta_disc=0.0
+2025-09-28 21:02:54,550 - INFO -   Evaluation: every 5 epochs, 16 episodes
+2025-09-28 21:16:41,382 - INFO - Using device: cuda
+2025-09-28 21:16:41,391 - INFO - Set random seed: 0
+2025-09-28 21:16:41,664 - INFO - Model parameters: 605,923
+2025-09-28 21:16:42,784 - INFO - Optimizer: AdamW(lr=0.0003, weight_decay=0.0001)
+2025-09-28 21:16:42,784 - INFO - Training Configuration:
+2025-09-28 21:16:42,784 - INFO -   Problem: T=30, n=4, alphabet=2
+2025-09-28 21:16:42,784 - INFO -   Training: epochs=50, episodes_per_epoch=4
+2025-09-28 21:16:42,784 - INFO -   Learning: lr=0.0003, gamma=0.99, entropy_coef=0.01
+2025-09-28 21:16:42,784 - INFO -   Rewards: alpha_overlap=0.05, beta_disc=0.0
+2025-09-28 21:16:42,784 - INFO -   Evaluation: every 5 epochs, 16 episodes

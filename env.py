@@ -281,8 +281,6 @@ class TilePlacementEnv:
                 for (dx, dy, _) in self.pre_all.get((u, v), []):
                     overlap_positions.add((ux + dx, uy + dy))
 
-            feasible_overlap_found = False
-
             for (x, y) in overlap_positions:
                 if not feasible_on_occupancy(self.tiles[v], x, y, occ):
                     continue
@@ -300,20 +298,18 @@ class TilePlacementEnv:
                             break
 
                 cands.append((v, x, y, False, best_ov, H_sum))
-                feasible_overlap_found = True
 
-            # Fallback: adjacency
-            if not feasible_overlap_found:
-                adj_positions = set()
-                for u in self.placed_ids:
-                    ux, uy = self.placements[u]
-                    for (dx, dy) in self.adj_offs:
-                        adj_positions.add((ux + dx, uy + dy))
+            # Adjacency-based (could be use to fill gaps)
+            adj_positions = set()
+            for u in self.placed_ids:
+                ux, uy = self.placements[u]
+                for (dx, dy) in self.adj_offs:
+                    adj_positions.add((ux + dx, uy + dy))
 
-                for (x, y) in adj_positions:
-                    if not feasible_on_occupancy(self.tiles[v], x, y, occ):
-                        continue
-                    cands.append((v, x, y, True, 0, 0))
+            for (x, y) in adj_positions:
+                if not feasible_on_occupancy(self.tiles[v], x, y, occ):
+                    continue
+                cands.append((v, x, y, True, 0, 0))
 
         return cands
 
@@ -376,6 +372,7 @@ def build_step_batch_from_env(
     raster_pad: int = 1,
     max_crop_hw: Optional[int] = None,
     device: Optional[torch.device | str] = None,
+    return_cands=False
 ) -> StepBatch:
     """
     Convert environment state into a StepBatch for neural network processing.
@@ -402,6 +399,8 @@ def build_step_batch_from_env(
             cand_tile_idx=torch.zeros(1, 1, dtype=torch.long),
             expert_action=None,
         )
+        if return_cands:
+            return sb if device is None else sb.to(device), []
         return sb if device is None else sb.to(device)
 
     n = env.n
@@ -451,6 +450,8 @@ def build_step_batch_from_env(
         cand_tile_idx=tilei_t,
         expert_action=None
     )
+    if return_cands:
+        return sb if device is None else sb.to(device), raw_cands
     return sb if device is None else sb.to(device)
 
 # ===== Tile Embedding Utilities =====
