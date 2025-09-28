@@ -170,6 +170,15 @@ def generate_tile_set(
         "gt_source": "hidden",
     }
 
+def make_synthetic_tiles(T: int, n: int, alphabet: int, seed: Optional[int]=0) -> List[np.ndarray]:
+    rng = np.random.RandomState(seed)
+    tiles = []
+    for _ in range(T):
+        tiles.append(rng.randint(0, alphabet, size=(n,n), dtype=np.int64))
+    return {
+        "tiles": tiles,
+    }
+
 # ------------------ Batch helpers ------------------
 
 def _save_npz_dataset(path: Path, pack: Dict[str, Any]) -> None:
@@ -204,6 +213,51 @@ def _save_npz_dataset(path: Path, pack: Dict[str, Any]) -> None:
 def make_dataset_name(prefix: str, mode: str, n: int, T: int, A: int, seed: int) -> str:
     return f"{prefix}_{mode}_n{n}_T{T}_A{A}_seed{seed}.npz"
 
+def make_synthetic_tiles(T: int, n: int, alphabet: int, seed: Optional[int]=0) -> List[np.ndarray]:
+    rng = np.random.RandomState(seed)
+    tiles = []
+    for _ in range(T):
+        tiles.append(rng.randint(0, alphabet, size=(n,n), dtype=np.int64))
+    return tiles
+
+
+def generate_synthetic_tiles(
+    n: int,
+    num_tiles: int,
+    alphabet_size: int = 2,
+    rng_seed: int = 123,
+) -> Dict[str, Any]:
+    """
+    Create a set of synthetic n×n tiles using make_synthetic_tiles.
+    This creates a bare dataset without computing optimal placements.
+    
+    Returns a dict with minimal required fields for dataset storage.
+    """
+    assert n >= 1 and num_tiles >= 1
+    
+    # Generate tiles using make_synthetic_tiles
+    tiles = make_synthetic_tiles(T=num_tiles, n=n, alphabet=alphabet_size, seed=rng_seed)
+
+    # Create minimal placeholder values since we're not computing optimal solution
+    # Empty placements and bbox
+    placements = {}
+    bbox = [0, -1, 0, -1]  # Empty bbox
+    canvas = np.array([[]], dtype=int)  # Empty canvas
+
+    return {
+        "tiles": tiles,
+        "true_placements": placements,
+        "true_bbox": bbox,
+        "true_canvas": canvas,
+        "optimal_m": 0,  # Placeholder since we don't compute optimal
+        "n": n,
+        "alphabet_size": alphabet_size,
+        "canvas_size": (0, 0),  # Placeholder
+        "gt_time": 0.0,
+        "gt_source": "synthetic",
+    }
+
+
 def generate_datasets(
     out_dir: str,
     mode: str,
@@ -218,7 +272,7 @@ def generate_datasets(
 ) -> List[str]:
     """
     Generate 'count' datasets with identical parameters (different seeds) and save them under out_dir.
-    mode: 'random' (bruteforce GT) or 'hidden' (connected from hidden canvas).
+    mode: 'random' (bruteforce GT), 'hidden' (connected from hidden canvas), or 'synthetic' (bare synthetic tiles).
     Returns list of file paths.
     """
     Path(out_dir).mkdir(parents=True, exist_ok=True)
@@ -233,8 +287,10 @@ def generate_datasets(
                 canvas_size=(canvas_m, canvas_m) if canvas_m else None,
                 alphabet_size=alphabet_size, min_overlap=min_overlap, rng_seed=seed
             )
+        elif mode == "synthetic":
+            pack = generate_synthetic_tiles(n=n, num_tiles=num_tiles, alphabet_size=alphabet_size, rng_seed=seed)
         else:
-            raise ValueError("mode must be 'random' or 'hidden'")
+            raise ValueError("mode must be 'random', 'hidden', or 'synthetic'")
 
         fname = make_dataset_name(prefix, mode, n, num_tiles, alphabet_size, seed)
         fpath = Path(out_dir) / fname

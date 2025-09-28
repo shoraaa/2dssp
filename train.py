@@ -1,384 +1,386 @@
-# train.py
-# Usage:
-#   python train.py --instances 64 --steps 5000 --T 16 --n 6 --alphabet 6 --batch_size 8 --device cuda
-#
+#!/usr/bin/env python3
+# train.py — Batched REINFORCE with fixed train/val datasets.
 
-from __future__ import annotations
 import os
-import time
-import math
 import argparse
-from typing import List, Tuple, Optional
+from typing import List, Optional, Tuple
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.optim import AdamW
+from tqdm import trange
 import wandb
 
-# Local modules from previous replies
-from neural_solver import NeuralSolver, TileCNN
+# ---- Import your modules ----
+from net import NeuralSolver, TileCNN
 from env import (
-    TilePlacementEnv, StepBatch,
-    make_synthetic_tiles, precompute_tile_embeddings,
-    build_step_batch_from_env, choose_expert_action, layout_bbox
+    TilePlacementEnv,
+    bbox_increase_if_place,
+    make_synthetic_tiles,
+    precompute_tile_embeddings,
+    build_step_batch_from_env,
+    layout_bbox,
 )
 
-# ----------------------------
-# Collation utilities
-# ----------------------------
+def masked_log_softmax(logits: torch.Tensor, mask: torch.Tensor, dim: int = -1) -> torch.Tensor:
+    very_neg = torch.finfo(logits.dtype).min
+    return F.log_softmax(logits.masked_fill(~mask.bool(), very_neg), dim=dim)
 
-def pad_step_batches(batches: List[StepBatch]) -> StepBatch:
-    """
-    Collate a list of StepBatch (possibly with different M/A sizes) into one batch by padding.
-    Returns a (B)-batched StepBatch with:
-      - occ: stacked (pad H/W to max via center padding)
-      - tiles_left, tiles_left_mask: pad M to max_M
-      - cand_feats, cand_mask, cand_tile_idx: pad A to max_A
-      - expert_action: stacked (if any is None -> returns None)
-    """
-    B = len(batches)
-    # 1) OCC crop: (C, H, W) vary in H/W; we center-pad to max
-    C = batches[0].occ.size(1)
-    maxH = max(b.occ.size(2) for b in batches)
-    maxW = max(b.occ.size(3) for b in batches)
-    occ_out = []
-    for b in batches:
-        _, Cb, Hb, Wb = b.occ.shape
-        pad_h = maxH - Hb
-        pad_w = maxW - Wb
-        # center pad: (left, right, top, bottom)
-        l = pad_w // 2
-        r = pad_w - l
-        t = pad_h // 2
-        bt = pad_h - t
-        occ_out.append(F.pad(b.occ, (l, r, t, bt)))  # (1,C,maxH,maxW)
-    occ = torch.cat(occ_out, dim=0)  # (B, C, maxH, maxW)
+@torch.no_grad()
+def compute_delta_m(env, x, y):
+    return float(bbox_increase_if_place(x, y, env.n, env.bbox))
 
-    # 2) tiles_left
-    maxM = max(b.tiles_left.size(1) for b in batches)
-    d_tile = batches[0].tiles_left.size(-1)
-    tiles_left = torch.zeros(B, maxM, d_tile, dtype=batches[0].tiles_left.dtype)
-    tiles_left_mask = torch.zeros(B, maxM, dtype=torch.bool)
-    for i, b in enumerate(batches):
-        M = b.tiles_left.size(1)
-        tiles_left[i, :M] = b.tiles_left
-        tiles_left_mask[i, :M] = b.tiles_left_mask
-
-    # 3) candidates
-    maxA = max(b.cand_feats.size(1) for b in batches)
-    Fdim = batches[0].cand_feats.size(-1)
-    cand_feats = torch.zeros(B, maxA, Fdim, dtype=batches[0].cand_feats.dtype)
-    cand_mask = torch.zeros(B, maxA, dtype=torch.bool)
-    cand_tile_idx = torch.zeros(B, maxA, dtype=torch.long)
-    for i, b in enumerate(batches):
-        A = b.cand_feats.size(1)
-        cand_feats[i, :A] = b.cand_feats
-        cand_mask[i, :A] = b.cand_mask
-        cand_tile_idx[i, :A] = b.cand_tile_idx
-
-    # 4) expert actions (if any missing -> return None)
-    if any(b.expert_action is None for b in batches):
-        expert_action = None
-    else:
-        expert_action = torch.cat([b.expert_action for b in batches], dim=0)  # (B,)
-
-    return StepBatch(
-        occ=occ,
-        tiles_left=tiles_left,
-        tiles_left_mask=tiles_left_mask,
-        cand_feats=cand_feats,
-        cand_mask=cand_mask,
-        cand_tile_idx=cand_tile_idx,
-        expert_action=expert_action
+@torch.no_grad()
+def model_pick_action(model: NeuralSolver, sb, device, temperature: float = 1.0, argmax: bool = True) -> int:
+    logits, _ = model(
+        sb.occ.to(device),
+        sb.tiles_left.to(device),
+        sb.tiles_left_mask.to(device),
+        sb.cand_feats.to(device),
+        sb.cand_mask.to(device),
+        sb.cand_tile_idx.to(device),
     )
+    logits = logits / max(1e-6, temperature)
+    logits[~sb.cand_mask.to(device)] = -1e9
+    if argmax:
+        return int(logits.argmax(dim=-1).item())
+    probs = F.softmax(logits, dim=-1).squeeze(0).cpu()
+    probs[~sb.cand_mask.squeeze(0)] = 0.0
+    probs = probs / (probs.sum() + 1e-9)
+    return int(torch.distributions.Categorical(probs).sample().item())
+
+@torch.no_grad()
+def evaluate_instance(model: NeuralSolver, env: TilePlacementEnv, tile_embs: torch.Tensor, device, temperature=0.7, greedy=True):
+    env.reset()
+    steps = 0
+    while not env.done and steps < 10000:
+        sb = build_step_batch_from_env(env, tile_embs)
+        if not sb.cand_mask.any():
+            break
+        a = model_pick_action(model, sb, device, temperature=temperature, argmax=greedy)
+        raw_cands = env.generate_candidates()
+        env.step(raw_cands[a])
+        steps += 1
+    m, _ = layout_bbox(env.placements, env.n)
+    return m, steps
 
 # ----------------------------
-# Instance manager for batching
+# Dataset builders
 # ----------------------------
+def make_dataset(size: int, T: int, n: int, alphabet: int, seed: int) -> Tuple[List[TilePlacementEnv], List[torch.Tensor]]:
+    envs = []
+    for i in range(size):
+        tiles = make_synthetic_tiles(T=T, n=n, alphabet=alphabet, seed=seed + i)
+        envs.append(TilePlacementEnv(tiles, alphabet=alphabet))
+    # NOTE: tile_cnn-dependent embeddings are filled later once tile_cnn is constructed.
+    return envs
 
-class InstancePool:
-    """
-    Holds multiple parallel environments (synthetic) and their tile embeddings.
-    Each call to `next_batch()` returns a collated StepBatch with expert labels,
-    and advances every env by applying the model (or expert) action from previous step.
-    """
-    def __init__(self, num_envs: int, T: int, n: int, alphabet: int, device: torch.device,
-                 tile_cnn: TileCNN):
-        self.num_envs = num_envs
-        self.T = T
-        self.n = n
-        self.alphabet = alphabet
-        self.device = device
-        self.tile_cnn = tile_cnn
+def compute_returns(rewards: List[float], gamma: float) -> torch.Tensor:
+    G = 0.0
+    out = []
+    for r in reversed(rewards):
+        G = r + gamma * G
+        out.append(G)
+    out.reverse()
+    return torch.tensor(out, dtype=torch.float32)
 
-        self.envs: List[TilePlacementEnv] = []
-        self.tile_embs_list: List[torch.Tensor] = []
-        self.reset_all()
-
-    def reset_all(self):
-        self.envs.clear()
-        self.tile_embs_list.clear()
-        for _ in range(self.num_envs):
-            tiles = make_synthetic_tiles(T=self.T, n=self.n, alphabet=self.alphabet, seed=None)
-            env = TilePlacementEnv(tiles, alphabet=self.alphabet)
-            self.envs.append(env)
-            tile_embs = precompute_tile_embeddings(tiles, self.alphabet, self.tile_cnn, self.device)
-            self.tile_embs_list.append(tile_embs)
-
-    def next_batch(self) -> StepBatch:
-        # If any env is done, reset it (keeps training perpetual)
-        for i, env in enumerate(self.envs):
-            if env.done:
-                tiles = make_synthetic_tiles(T=self.T, n=self.n, alphabet=self.alphabet, seed=None)
-                self.envs[i] = TilePlacementEnv(tiles, alphabet=self.alphabet)
-                self.tile_embs_list[i] = precompute_tile_embeddings(tiles, self.alphabet, self.tile_cnn, self.device)
-
-        # Build step batches and add expert labels
-        step_batches: List[StepBatch] = []
-        raw_cands_per_env: List[list] = []  # keep to apply actions later if needed
-
-        for i, env in enumerate(self.envs):
-            sb = build_step_batch_from_env(env, self.tile_embs_list[i])
-            # If no candidates (rare), force reset and build again
-            if sb.cand_mask.sum().item() == 0:
-                tiles = make_synthetic_tiles(T=self.T, n=self.n, alphabet=self.alphabet, seed=None)
-                self.envs[i] = TilePlacementEnv(tiles, alphabet=self.alphabet)
-                self.tile_embs_list[i] = precompute_tile_embeddings(tiles, self.alphabet, self.tile_cnn, self.device)
-                sb = build_step_batch_from_env(self.envs[i], self.tile_embs_list[i])
-
-            # Assign greedy expert action (for IL)
-            act = choose_expert_action(sb)
-            sb.expert_action = act
-            step_batches.append(sb)
-
-        return pad_step_batches(step_batches)
-
-    def apply_actions(self, action_indices: torch.Tensor):
-        """
-        Applies chosen action indices (B,) to each env.
-        `action_indices` are indices in the *padded* candidate list; we map back
-        using each env's current raw candidates at time of `build_step_batch_from_env`.
-        For simplicity we recompute candidates now (same state) and index them.
-        """
-        assert action_indices.numel() == self.num_envs
-        for i, env in enumerate(self.envs):
-            raw_cands = env.generate_candidates()
-            # Safety: clip action idx if padding made it point past actual #cands
-            a = int(action_indices[i].item())
-            if a >= len(raw_cands):
-                a = max(0, len(raw_cands) - 1)
-            env.step(raw_cands[a])
-
-
-# ----------------------------
-# Training loop
-# ----------------------------
-
-def train_imitation(
+def rollout_episode(
     model: NeuralSolver,
-    pool: InstancePool,
-    steps: int,
+    env: TilePlacementEnv,
+    tile_embs: torch.Tensor,
+    device,
+    temperature: float,
+    max_steps: int,
+    overlap_bonus_coef: float = 0.0,
+) -> Tuple[torch.Tensor, torch.Tensor, float, int, float]:
+    """
+    Returns:
+      logps: (L,) on device
+      rewards: (L,) on CPU
+      final_m: float
+      steps: int
+      entropy_sum: float
+    Reward: r_t = (m_{t-1} - m_t) + overlap_bonus_coef * H_sum(action_t)
+    """
+    model.eval()
+    env.reset()
+    logps: List[torch.Tensor] = []
+    rewards: List[float] = []
+    entropy_sum = 0.0
+    steps = 0
+
+    while not env.done and steps < max_steps:
+        sb = build_step_batch_from_env(env, tile_embs)
+        if not sb.cand_mask.any():
+            break
+
+        logits, _ = model(
+            sb.occ.to(device),
+            sb.tiles_left.to(device),
+            sb.tiles_left_mask.to(device),
+            sb.cand_feats.to(device),
+            sb.cand_mask.to(device),
+            sb.cand_tile_idx.to(device),
+        )
+        masked_logits = logits / max(1e-6, temperature)
+        masked_logits[~sb.cand_mask.to(device)] = -1e9
+        logp_all = F.log_softmax(masked_logits, dim=-1).squeeze(0)
+        p_all = logp_all.exp()
+
+        ent = -(p_all * logp_all).sum()
+        entropy_sum += float(ent.item())
+
+        probs = p_all.clone()
+        probs[~sb.cand_mask.to(device).squeeze(0)] = 0.0
+        probs = probs / (probs.sum() + 1e-9)
+        a = int(torch.distributions.Categorical(probs).sample().item())
+        logps.append(logp_all[a])
+
+        old_m, _ = layout_bbox(env.placements, env.n)
+        raw_cands = env.generate_candidates()
+        env.step(raw_cands[a])
+        new_m, _ = layout_bbox(env.placements, env.n)
+        delta_m = old_m - new_m
+
+        H_sum = sb.cand_feats[0, a, 0].item()
+        r = float(delta_m) + overlap_bonus_coef * float(H_sum)
+        rewards.append(r)
+        steps += 1
+
+    final_m, _ = layout_bbox(env.placements, env.n)
+    return (torch.stack(logps) if logps else torch.empty(0, device=device),
+            torch.tensor(rewards, dtype=torch.float32),
+            float(final_m),
+            steps,
+            float(entropy_sum))
+
+def train_reinforce(
+    model: NeuralSolver,
+    tile_cnn: nn.Module,
     batch_size: int,
+    T: int,
+    n: int,
+    alphabet: int,
+    epochs: int,
+    gamma: float,
     lr: float,
+    device,
     log_every: int,
-    ckpt_dir: str,
-    device: torch.device,
+    eval_every: int,
+    save_dir: str,
+    temperature: float,
+    max_steps_per_episode: int,
+    overlap_bonus_coef: float,
+    train_data_size: int,
+    val_data_size: int,
+    baseline_ema_coef: float = 0.9,
+    resume_ckpt: Optional[str] = None,
+    entropy_coef: float = 0.01,
     use_wandb: bool = True,
-    wandb_config: dict = None,
+    data_seed: int = 1234,
 ):
-    os.makedirs(ckpt_dir, exist_ok=True)
-    
-    # Initialize wandb if enabled
-    if use_wandb and wandb_config:
-        wandb.init(**wandb_config)
-        wandb.watch(model, log="gradients", log_freq=log_every)
-    
-    optim = torch.optim.AdamW(model.parameters(), lr=lr)
-    scaler = torch.cuda.amp.GradScaler(enabled=(device.type == "cuda"))
+    os.makedirs(save_dir, exist_ok=True)
+    opt = AdamW(model.parameters(), lr=lr)
 
-    model.train()
-    ema_loss = None
-    t0 = time.time()
+    if resume_ckpt and os.path.isfile(resume_ckpt):
+        ckpt = torch.load(resume_ckpt, map_location=device)
+        model.load_state_dict(ckpt["model"])
+        opt.load_state_dict(ckpt["opt"])
+        print(f"Resumed from {resume_ckpt}")
 
-    for it in range(1, steps + 1):
-        # Build a mega-batch by concatenating several collated batches
-        # (We reuse the pool in chunks to reach desired batch_size)
-        step_batches = []
-        envs_per_micro = pool.num_envs
-        micro_batches = math.ceil(batch_size / envs_per_micro)
+    # ----------------------------
+    # Build datasets
+    # ----------------------------
+    train_envs = make_dataset(train_data_size, T, n, alphabet, seed=data_seed)
+    val_envs   = make_dataset(val_data_size,   T, n, alphabet, seed=data_seed + 10_000)
 
-        for _ in range(micro_batches):
-            sb = pool.next_batch()
-            step_batches.append(sb)
+    # Precompute tile embeddings once (TileCNN is not optimized here)
+    train_tile_embs = [precompute_tile_embeddings(e.tiles, e.alphabet, tile_cnn, device) for e in train_envs]
+    val_tile_embs   = [precompute_tile_embeddings(e.tiles, e.alphabet, tile_cnn, device) for e in val_envs]
 
-        # Merge micro-batches (pad across them too)
-        mega = pad_step_batches(step_batches)
+    ema_return = None
+    tbar = trange(1, epochs + 1, desc="train[REINFORCE]", ncols=100)
+    for ep in tbar:
+        model.train()
+        opt.zero_grad(set_to_none=True)
 
-        occ = mega.occ.to(device)
-        tiles_left = mega.tiles_left.to(device)
-        tiles_left_mask = mega.tiles_left_mask.to(device)
-        cand_feats = mega.cand_feats.to(device)
-        cand_mask = mega.cand_mask.to(device)
-        cand_tile_idx = mega.cand_tile_idx.to(device)
-        expert_action = mega.expert_action.to(device)
+        # ---- Sample a mini-batch of train episodes (with replacement) ----
+        idxs = np.random.randint(low=0, high=train_data_size, size=batch_size)
+        epi_data = []
+        batch_returns, batch_steps, batch_m = [], [], []
+        total_entropy_sum = 0.0
 
-        with torch.cuda.amp.autocast(enabled=(device.type == "cuda")):
-            logits, _ = model(occ, tiles_left, tiles_left_mask, cand_feats, cand_mask, cand_tile_idx)
-            # masked log-softmax
-            very_neg = torch.finfo(logits.dtype).min
-            masked_logits = logits.masked_fill(~cand_mask, very_neg)
-            logp = F.log_softmax(masked_logits, dim=-1)
-            loss = F.nll_loss(logp, expert_action, reduction='mean')
+        for idx in idxs:
+            env = train_envs[idx]
+            tile_embs = train_tile_embs[idx]
+            logps, rewards, final_m, steps, ent_sum = rollout_episode(
+                model=model,
+                env=env,
+                tile_embs=tile_embs,
+                device=device,
+                temperature=temperature,
+                max_steps=max_steps_per_episode,
+                overlap_bonus_coef=overlap_bonus_coef,
+            )
+            batch_steps.append(steps)
+            batch_m.append(final_m)
+            total_entropy_sum += ent_sum
 
-        optim.zero_grad(set_to_none=True)
-        scaler.scale(loss).backward()
-        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-        scaler.step(optim)
-        scaler.update()
+            if logps.numel() == 0:
+                continue
+            G = compute_returns(rewards.tolist(), gamma).to(device)
+            batch_returns.append(G[0].item())
+            epi_data.append({"logps": logps, "G": G})
 
-        # Apply model actions to advance each env once (greedy argmax)
-        with torch.no_grad():
-            probs = F.softmax(masked_logits, dim=-1)
-            actions = probs.argmax(dim=-1)
-        # Split actions back to pool micros and apply (use first micro only to keep step sync)
-        # Alternatively, you can apply actions after each micro call; here we just
-        # apply the first micro's actions for simplicity.
-        first_micro_actions = actions[:pool.num_envs]
-        pool.apply_actions(first_micro_actions.cpu())
+        if len(epi_data) == 0:
+            # all dead; skip update but still proceed to possible eval/log
+            continue
 
-        # Logging
-        loss_val = loss.item()
-        ema_loss = loss_val if ema_loss is None else 0.98 * ema_loss + 0.02 * loss_val
-        
-        if it % log_every == 0:
-            # Probe first env for current m
-            m, _ = layout_bbox(pool.envs[0].placements, pool.envs[0].n)
-            dt = time.time() - t0
-            print(f"[it {it:05d}] loss={loss_val:.4f} ema={ema_loss:.4f} m(env0)={m}  dt={dt:.1f}s")
-            
-            # Log to wandb
+        batch_avg_return = float(np.mean(batch_returns)) if batch_returns else 0.0
+        ema_return = batch_avg_return if ema_return is None else (
+            baseline_ema_coef * ema_return + (1 - baseline_ema_coef) * batch_avg_return
+        )
+
+        policy_loss_total = torch.zeros((), device=device)
+        all_advs = []
+        for ed in epi_data:
+            G = ed["G"]
+            baseline = torch.full_like(G, float(ema_return), device=device)
+            adv = G - baseline
+            all_advs.append(adv.detach().cpu())
+            policy_loss_total = policy_loss_total - (ed["logps"] * adv.detach()).sum()
+
+        loss = policy_loss_total - entropy_coef * torch.tensor(total_entropy_sum, dtype=torch.float32, device=device)
+        loss.backward()
+        nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+        opt.step()
+
+        mean_steps = float(np.mean(batch_steps)) if batch_steps else 0.0
+        mean_m = float(np.mean(batch_m)) if batch_m else 0.0
+        mean_entropy = total_entropy_sum / max(1, int(sum(batch_steps)))
+        tbar.set_postfix_str(f"R0={batch_avg_return:.3f} m={mean_m:.0f} steps={mean_steps:.1f} loss={float(loss):.3f}")
+
+        if use_wandb:
+            adv_cat = torch.cat(all_advs) if len(all_advs) else torch.tensor([0.0])
+            total_steps = max(1, int(sum(batch_steps)))
+            wandb.log({
+                "train/return": batch_avg_return,
+                "train/m": mean_m,
+                "train/policy_loss": float(policy_loss_total) / total_steps,
+                "train/loss": float(loss) / total_steps,
+                "train/entropy": mean_entropy,
+                "train/baseline_ema": ema_return,
+                "train/advantage": float(adv_cat.mean().item()),
+                "epoch": ep,
+            })
+
+        # ---- Validation ----
+        if ep % eval_every == 0:
+            model.eval()
+            ms, stepss = [], []
+            for venv, vemb in zip(val_envs, val_tile_embs):
+                m, used_steps = evaluate_instance(model, venv, vemb, device, temperature=0.7, greedy=True)
+                ms.append(m)
+                stepss.append(used_steps)
+            val_m_mean = float(np.mean(ms)) if ms else 0.0
+            val_steps_mean = float(np.mean(stepss)) if stepss else 0.0
+            print(f"\n[val @ epoch {ep}] m_mean={val_m_mean:.2f} steps_mean={val_steps_mean:.1f} (N={len(ms)})")
             if use_wandb:
                 wandb.log({
-                    "loss": loss_val,
-                    "ema_loss": ema_loss,
-                    "canvas_size_env0": m,
-                    "step": it,
-                    "time_per_step": dt / log_every,
-                    "learning_rate": optim.param_groups[0]['lr'],
-                }, step=it)
-            
-            t0 = time.time()  # Reset timer after logging
+                    "val/m": val_m_mean,
+                    "epoch": ep
+                })
 
-        # Save ckpt
-        if it % max(1000, log_every*10) == 0:
-            path = os.path.join(ckpt_dir, f"ckpt_{it:06d}.pt")
-            torch.save({
-                "it": it,
-                "model": model.state_dict(),
-                "optim": optim.state_dict(),
-            }, path)
-            
-            # Log checkpoint as wandb artifact
-            if use_wandb:
-                artifact = wandb.Artifact(f"checkpoint-step-{it}", type="model")
-                artifact.add_file(path)
-                wandb.log_artifact(artifact)
+        if ep % log_every == 0:
+            ckpt_path = os.path.join(save_dir, f"ckpt_reinforce_ep{ep}.pt")
+            torch.save({"model": model.state_dict(), "opt": opt.state_dict()}, ckpt_path)
 
-    # final save
-    path = os.path.join(ckpt_dir, f"final.pt")
-    torch.save({"model": model.state_dict()}, path)
-    print(f"Saved final checkpoint to {path}")
-    
-    # Log final checkpoint as wandb artifact
-    if use_wandb:
-        artifact = wandb.Artifact("final-checkpoint", type="model")
-        artifact.add_file(path)
-        wandb.log_artifact(artifact)
-        wandb.finish()
-
+    final_path = os.path.join(save_dir, "final_reinforce.pt")
+    torch.save({"model": model.state_dict(), "opt": opt.state_dict()}, final_path)
+    print(f"Saved final REINFORCE checkpoint to {final_path}")
 
 # ----------------------------
-# Main
+# CLI
 # ----------------------------
-
 def main():
-    p = argparse.ArgumentParser()
-    p.add_argument("--instances", type=int, default=8, help="parallel environments")
-    p.add_argument("--steps", type=int, default=5000)
-    p.add_argument("--batch_size", type=int, default=32)
-    p.add_argument("--T", type=int, default=12, help="tiles per instance")
-    p.add_argument("--n", type=int, default=6, help="tile size n×n")
-    p.add_argument("--alphabet", type=int, default=6, help="symbol classes")
+    p = argparse.ArgumentParser(description="Train neural tile solver (REINFORCE, batched over fixed datasets)")
+    p.add_argument("--alphabet", type=int, default=2)
+    p.add_argument("--T", type=int, default=30)
+    p.add_argument("--n", type=int, default=4)
+    p.add_argument("--batch_size", type=int, default=8, help="episodes sampled per epoch")
     p.add_argument("--lr", type=float, default=1e-3)
+    p.add_argument("--save_dir", type=str, default="./checkpoints")
+    p.add_argument("--eval_every", type=int, default=10)
     p.add_argument("--log_every", type=int, default=50)
-    p.add_argument("--ckpt_dir", type=str, default="./checkpoints")
+    p.add_argument("--seed", type=int, default=0)
     p.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
-    
-    # Wandb arguments
-    p.add_argument("--wandb_project", type=str, default="2dssp", help="wandb project name")
-    p.add_argument("--wandb_run_name", type=str, default=None, help="wandb run name")
-    p.add_argument("--no_wandb", action="store_true", help="disable wandb logging")
+    p.add_argument("--temperature", type=float, default=0.7)
+    p.add_argument("--resume", type=str, default=None)
+    p.add_argument("--wandb", action="store_true")
+    # model dims
+    p.add_argument("--d_tile", type=int, default=64)
+    p.add_argument("--d_model", type=int, default=128)
+    p.add_argument("--cand_feat_dim", type=int, default=10)
+    # training schedule + datasets
+    p.add_argument("--epochs", type=int, default=500)
+    p.add_argument("--gamma", type=float, default=0.99)
+    p.add_argument("--max_steps_per_episode", type=int, default=2000)
+    p.add_argument("--overlap_bonus_coef", type=float, default=0.0)
+    p.add_argument("--entropy_coef", type=float, default=0.01)
+    p.add_argument("--train_data_size", type=int, default=2048)
+    p.add_argument("--val_data_size", type=int, default=256)
+    p.add_argument("--data_seed", type=int, default=1234, help="base seed for dataset generation")
+
     args = p.parse_args()
 
+    torch.manual_seed(args.seed)
+    torch.cuda.manual_seed_all(args.seed)
     device = torch.device(args.device)
 
-    # Prepare wandb configuration
-    use_wandb = not args.no_wandb
-    wandb_config = None
-    if use_wandb:
-        wandb_config = {
-            "project": args.wandb_project,
-            "name": args.wandb_run_name,
-            "config": {
-                "instances": args.instances,
-                "steps": args.steps,
-                "batch_size": args.batch_size,
-                "T": args.T,
-                "n": args.n,
-                "alphabet": args.alphabet,
-                "lr": args.lr,
-                "log_every": args.log_every,
-                "device": args.device,
-                "c_occ": args.alphabet + 1,
-                "d_tile": 64,
-                "d_model": 128,
-                "cand_feat_dim": 10,
-            }
-        }
+    if args.wandb:
+        wandb.init(
+            project="neural-2dssp",
+            config=vars(args),
+            name=f"reinforce_T{args.T}_n{args.n}_a{args.alphabet}_train{args.train_data_size}_val{args.val_data_size}"
+        )
 
-    # Model hyperparams (must match env feature dims)
-    c_occ = args.alphabet + 1
-    d_tile = 64
-    d_model = 128
-    cand_feat_dim = 10  # matches env_generator.build_step_batch_from_env
+    tile_cnn = TileCNN(in_ch=args.alphabet, d_tile=args.d_tile).to(device)
+    model = NeuralSolver(
+        c_occ=args.alphabet + 1,
+        d_tile=args.d_tile,
+        d_model=args.d_model,
+        cand_feat_dim=args.cand_feat_dim
+    ).to(device)
 
-    # Init models
-    tile_cnn = TileCNN(in_ch=args.alphabet, d_tile=d_tile).to(device)
-    model = NeuralSolver(c_occ=c_occ, d_tile=d_tile, d_model=d_model, cand_feat_dim=cand_feat_dim).to(device)
-
-    # Instance pool
-    pool = InstancePool(
-        num_envs=args.instances,
+    train_reinforce(
+        model=model,
+        tile_cnn=tile_cnn,
+        batch_size=args.batch_size,
         T=args.T,
         n=args.n,
         alphabet=args.alphabet,
+        epochs=args.epochs,
+        gamma=args.gamma,
+        lr=args.lr,
         device=device,
-        tile_cnn=tile_cnn,
+        log_every=args.log_every,
+        eval_every=args.eval_every,
+        save_dir=args.save_dir,
+        temperature=args.temperature,
+        max_steps_per_episode=args.max_steps_per_episode,
+        overlap_bonus_coef=args.overlap_bonus_coef,
+        train_data_size=args.train_data_size,
+        val_data_size=args.val_data_size,
+        resume_ckpt=args.resume,
+        entropy_coef=args.entropy_coef,
+        use_wandb=args.wandb,
+        data_seed=args.data_seed,
     )
 
-    # Train (imitation on greedy expert)
-    train_imitation(
-        model=model,
-        pool=pool,
-        steps=args.steps,
-        batch_size=args.batch_size,
-        lr=args.lr,
-        log_every=args.log_every,
-        ckpt_dir=args.ckpt_dir,
-        device=device,
-        use_wandb=use_wandb,
-        wandb_config=wandb_config,
-    )
+    if args.wandb:
+        wandb.finish()
 
 if __name__ == "__main__":
     main()
