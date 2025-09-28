@@ -9,6 +9,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.cuda.amp import GradScaler, autocast
 from torch.optim import AdamW
 from tqdm import trange
 import wandb
@@ -33,38 +34,44 @@ def compute_delta_m(env, x, y):
     return float(bbox_increase_if_place(x, y, env.n, env.bbox))
 
 @torch.no_grad()
-def model_pick_action(model: NeuralSolver, sb, device, temperature: float = 1.0, argmax: bool = True) -> int:
+def model_pick_action(model: NeuralSolver, sb, temperature: float = 1.0, argmax: bool = True) -> int:
     logits, _ = model(
-        sb.occ.to(device),
-        sb.tiles_left.to(device),
-        sb.tiles_left_mask.to(device),
-        sb.cand_feats.to(device),
-        sb.cand_mask.to(device),
-        sb.cand_tile_idx.to(device),
+        sb.occ,
+        sb.tiles_left,
+        sb.tiles_left_mask,
+        sb.cand_feats,
+        sb.cand_mask,
+        sb.cand_tile_idx,
     )
     logits = logits / max(1e-6, temperature)
-    logits[~sb.cand_mask.to(device)] = -1e9
+    logits = logits.masked_fill(~sb.cand_mask, -1e9)
     if argmax:
         return int(logits.argmax(dim=-1).item())
-    probs = F.softmax(logits, dim=-1).squeeze(0).cpu()
+    probs = F.softmax(logits, dim=-1).squeeze(0)
     probs[~sb.cand_mask.squeeze(0)] = 0.0
     probs = probs / (probs.sum() + 1e-9)
     return int(torch.distributions.Categorical(probs).sample().item())
 
 @torch.no_grad()
 def evaluate_instance(model: NeuralSolver, env: TilePlacementEnv, tile_embs: torch.Tensor, device, temperature=0.7, greedy=True):
+    dev = torch.device(device)
+    if tile_embs.device != dev:
+        tile_embs = tile_embs.to(dev, non_blocking=True)
+
     env.reset()
     steps = 0
     while not env.done and steps < 10000:
-        sb = build_step_batch_from_env(env, tile_embs)
-        if not sb.cand_mask.any():
+        sb = build_step_batch_from_env(env, tile_embs, device=dev)
+        if not bool(sb.cand_mask.any().detach().cpu()):
             break
-        a = model_pick_action(model, sb, device, temperature=temperature, argmax=greedy)
+        a = model_pick_action(model, sb, temperature=temperature, argmax=greedy)
         raw_cands = env.generate_candidates()
         env.step(raw_cands[a])
         steps += 1
-    m, _ = layout_bbox(env.placements, env.n)
-    return m, steps
+    xmin, xmax, ymin, ymax = env.bbox
+    m = max(xmax - xmin + 1, ymax - ymin + 1)
+    return float(m), steps
+
 
 # ----------------------------
 # Dataset builders
@@ -94,67 +101,63 @@ def rollout_episode(
     temperature: float,
     max_steps: int,
     overlap_bonus_coef: float = 0.0,
+    amp_enabled: bool = False,
 ) -> Tuple[torch.Tensor, torch.Tensor, float, int, float]:
     """
-    Returns:
-      logps: (L,) on device
-      rewards: (L,) on CPU
-      final_m: float
-      steps: int
-      entropy_sum: float
-    Reward: r_t = (m_{t-1} - m_t) + overlap_bonus_coef * H_sum(action_t)
+    Reward: r_t = (- delta_m) + overlap_bonus_coef * H_sum(action_t)
     """
-    model.eval()
+    model.train()  # keep dropout/etc.; fine for policy gradient
     env.reset()
     logps: List[torch.Tensor] = []
     rewards: List[float] = []
-    entropy_sum = 0.0
+    entropy_sum_t = torch.zeros((), device=device, dtype=torch.float32)
     steps = 0
 
     while not env.done and steps < max_steps:
-        sb = build_step_batch_from_env(env, tile_embs)
-        if not sb.cand_mask.any():
+        sb = build_step_batch_from_env(env, tile_embs, device=device)
+        # avoid device sync with .item()
+        if not bool(sb.cand_mask.any().detach().cpu()):
             break
 
-        logits, _ = model(
-            sb.occ.to(device),
-            sb.tiles_left.to(device),
-            sb.tiles_left_mask.to(device),
-            sb.cand_feats.to(device),
-            sb.cand_mask.to(device),
-            sb.cand_tile_idx.to(device),
-        )
+        with autocast(enabled=amp_enabled):
+            logits, _ = model(
+                sb.occ,
+                sb.tiles_left,
+                sb.tiles_left_mask,
+                sb.cand_feats,
+                sb.cand_mask,
+                sb.cand_tile_idx,
+            )
         masked_logits = logits / max(1e-6, temperature)
-        masked_logits[~sb.cand_mask.to(device)] = -1e9
+        masked_logits = masked_logits.masked_fill(~sb.cand_mask, -1e9)
         logp_all = F.log_softmax(masked_logits, dim=-1).squeeze(0)
         p_all = logp_all.exp()
 
-        ent = -(p_all * logp_all).sum()
-        entropy_sum += float(ent.item())
+        entropy_sum_t = entropy_sum_t - (p_all * logp_all).sum()
 
         probs = p_all.clone()
-        probs[~sb.cand_mask.to(device).squeeze(0)] = 0.0
+        probs[~sb.cand_mask.squeeze(0)] = 0.0
         probs = probs / (probs.sum() + 1e-9)
-        a = int(torch.distributions.Categorical(probs).sample().item())
-        logps.append(logp_all[a])
+        a_t = torch.distributions.Categorical(probs).sample()  # tensor on device
+        logps.append(logp_all[a_t])
 
-        old_m, _ = layout_bbox(env.placements, env.n)
         raw_cands = env.generate_candidates()
-        env.step(raw_cands[a])
-        new_m, _ = layout_bbox(env.placements, env.n)
-        delta_m = old_m - new_m
+        a = int(a_t)  # a single, cheap sync
+        _, delta_m, H_sum = env.step_and_metrics(raw_cands[a])
 
-        H_sum = sb.cand_feats[0, a, 0].item()
-        r = float(delta_m) + overlap_bonus_coef * float(H_sum)
+        r = float(-delta_m) + overlap_bonus_coef * float(H_sum)
         rewards.append(r)
         steps += 1
 
-    final_m, _ = layout_bbox(env.placements, env.n)
+    # final m directly from bbox
+    xmin, xmax, ymin, ymax = env.bbox
+    final_m = float(max(xmax - xmin + 1, ymax - ymin + 1))
     return (torch.stack(logps) if logps else torch.empty(0, device=device),
             torch.tensor(rewards, dtype=torch.float32),
-            float(final_m),
+            final_m,
             steps,
-            float(entropy_sum))
+            float(entropy_sum_t.detach().cpu()))
+
 
 def train_reinforce(
     model: NeuralSolver,
@@ -184,6 +187,8 @@ def train_reinforce(
     os.makedirs(save_dir, exist_ok=True)
     opt = AdamW(model.parameters(), lr=lr)
 
+    scaler = GradScaler(enabled=use_amp and device.type == "cuda")
+
     if resume_ckpt and os.path.isfile(resume_ckpt):
         ckpt = torch.load(resume_ckpt, map_location=device)
         model.load_state_dict(ckpt["model"])
@@ -197,8 +202,15 @@ def train_reinforce(
     val_envs   = make_dataset(val_data_size,   T, n, alphabet, seed=data_seed + 10_000)
 
     # Precompute tile embeddings once (TileCNN is not optimized here)
-    train_tile_embs = [precompute_tile_embeddings(e.tiles, e.alphabet, tile_cnn, device) for e in train_envs]
-    val_tile_embs   = [precompute_tile_embeddings(e.tiles, e.alphabet, tile_cnn, device) for e in val_envs]
+    keep_embeddings_on_device = device.type == "cuda"
+    train_tile_embs = [
+        precompute_tile_embeddings(e.tiles, e.alphabet, tile_cnn, device, keep_on_device=keep_embeddings_on_device)
+        for e in train_envs
+    ]
+    val_tile_embs   = [
+        precompute_tile_embeddings(e.tiles, e.alphabet, tile_cnn, device, keep_on_device=keep_embeddings_on_device)
+        for e in val_envs
+    ]
 
     ema_return = None
     tbar = trange(1, epochs + 1, desc="train[REINFORCE]", ncols=100)
@@ -223,6 +235,7 @@ def train_reinforce(
                 temperature=temperature,
                 max_steps=max_steps_per_episode,
                 overlap_bonus_coef=overlap_bonus_coef,
+                amp_enabled=scaler.is_enabled(),
             )
             batch_steps.append(steps)
             batch_m.append(final_m)
@@ -260,7 +273,8 @@ def train_reinforce(
         mean_steps = float(np.mean(batch_steps)) if batch_steps else 0.0
         mean_m = float(np.mean(batch_m)) if batch_m else 0.0
         mean_entropy = total_entropy_sum / max(1, int(sum(batch_steps)))
-        tbar.set_postfix_str(f"R0={batch_avg_return:.3f} m={mean_m:.0f} steps={mean_steps:.1f} loss={float(loss):.3f}")
+        loss_scalar = loss.detach().item()
+        tbar.set_postfix_str(f"R0={batch_avg_return:.3f} m={mean_m:.0f} steps={mean_steps:.1f} loss={loss_scalar:.3f}")
 
         if use_wandb:
             adv_cat = torch.cat(all_advs) if len(all_advs) else torch.tensor([0.0])
@@ -268,8 +282,8 @@ def train_reinforce(
             wandb.log({
                 "train/return": batch_avg_return,
                 "train/m": mean_m,
-                "train/policy_loss": float(policy_loss_total) / total_steps,
-                "train/loss": float(loss) / total_steps,
+                "train/policy_loss": policy_loss_total.detach().item() / total_steps,
+                "train/loss": loss_scalar / total_steps,
                 "train/entropy": mean_entropy,
                 "train/baseline_ema": ema_return,
                 "train/advantage": float(adv_cat.mean().item()),

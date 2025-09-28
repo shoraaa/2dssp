@@ -124,32 +124,38 @@ def load_neural_context(
 @torch.no_grad()
 def run_neural_solver(neural: NeuralBenchmarkContext, tiles, alphabet: int):
     env = TilePlacementEnv(tiles, alphabet=alphabet)
-    tile_embs = precompute_tile_embeddings(env.tiles, env.alphabet, neural.tile_cnn, neural.device)
+    tile_embs = precompute_tile_embeddings(
+        env.tiles,
+        env.alphabet,
+        neural.tile_cnn,
+        neural.device,
+        keep_on_device=neural.device.type == "cuda",
+    )
     steps = 0
     status = "ok"
 
     while not env.done and steps < neural.max_steps:
-        sb = build_step_batch_from_env(env, tile_embs)
-        if not sb.cand_mask.any():
+        sb = build_step_batch_from_env(env, tile_embs, device=neural.device)
+        if not sb.cand_mask.any().item():
             status = "no_moves"
             break
 
-        occ = sb.occ.to(neural.device)
-        tiles_left = sb.tiles_left.to(neural.device)
-        tiles_left_mask = sb.tiles_left_mask.to(neural.device)
-        cand_feats = sb.cand_feats.to(neural.device)
-        cand_mask = sb.cand_mask.to(neural.device)
-        cand_tile_idx = sb.cand_tile_idx.to(neural.device)
-
-        logits, _ = neural.model(occ, tiles_left, tiles_left_mask, cand_feats, cand_mask, cand_tile_idx)
+        logits, _ = neural.model(
+            sb.occ,
+            sb.tiles_left,
+            sb.tiles_left_mask,
+            sb.cand_feats,
+            sb.cand_mask,
+            sb.cand_tile_idx,
+        )
         logits = logits / max(1e-6, neural.temperature)
-        logits = logits.masked_fill(~cand_mask, -1e9)
+        logits = logits.masked_fill(~sb.cand_mask, -1e9)
 
         if neural.greedy:
             action = int(logits.argmax(dim=-1).item())
         else:
             probs = F.softmax(logits, dim=-1)
-            probs = probs.masked_fill(~cand_mask, 0.0)
+            probs = probs.masked_fill(~sb.cand_mask, 0.0)
             norm = probs.sum(dim=-1, keepdim=True).clamp_min(1e-9)
             probs = probs / norm
             action = int(torch.distributions.Categorical(probs.squeeze(0)).sample().item())
