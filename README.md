@@ -5,7 +5,3 @@
 # Neural ouput:
 
 ![neural_output](figure/neural_output.png)
-
-# Optimal placement:
-
-![optimal](figure/optimal.png)
