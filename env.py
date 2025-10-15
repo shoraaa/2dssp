@@ -325,94 +325,6 @@ class TilePlacementEnv:
 
         return cands
 
-    def filter_candidates_after_placement(
-        self,
-        prev_cands: List[Tuple[int, int, int, bool, int, int]],
-        placed_tile_id: int,
-        placed_x: int,
-        placed_y: int,
-    ) -> List[Tuple[int, int, int, bool, int, int]]:
-        """
-        Filter existing candidates after placing a tile, removing invalid ones
-        and adding new candidates that overlap with the newly placed tile.
-        
-        This is much faster than regenerating all candidates from scratch.
-        
-        Args:
-            prev_cands: Previous candidate list
-            placed_tile_id: ID of the tile that was just placed
-            placed_x: X position of the placed tile
-            placed_y: Y position of the placed tile
-            
-        Returns:
-            Filtered and updated candidate list
-        """
-        n = self.n
-        occ = self.occ
-        
-        # Step 1: Remove candidates for the placed tile and check feasibility of remaining
-        filtered = []
-        for cand in prev_cands:
-            v, x, y, is_adj, best_ov, H_sum = cand
-            
-            # Skip candidates for the tile we just placed
-            if v == placed_tile_id:
-                continue
-                
-            # Check if candidate is still feasible (no occupancy conflicts)
-            if not feasible_on_occupancy(self.tiles[v], x, y, occ):
-                continue
-                
-            # Recompute overlap metrics since we have a new placed tile
-            new_best_ov = best_ov
-            new_H_sum = H_sum
-            
-            # Check overlap with the newly placed tile
-            dx_new = x - placed_x
-            dy_new = y - placed_y
-            for (dx0, dy0, ov) in self.pre_all.get((placed_tile_id, v), []):
-                if dx0 == dx_new and dy0 == dy_new:
-                    if ov > new_best_ov:
-                        new_best_ov = ov
-                    new_H_sum += ov
-                    break
-            
-            filtered.append((v, x, y, is_adj, new_best_ov, new_H_sum))
-        
-        # Step 2: Add new overlap-based candidates with the newly placed tile
-        new_cands_set = set((v, x, y) for v, x, y, _, _, _ in filtered)
-        
-        for v in self.remaining:
-            # Generate new positions that overlap with the newly placed tile
-            for (dx, dy, _) in self.pre_all.get((placed_tile_id, v), []):
-                x = placed_x + dx
-                y = placed_y + dy
-                
-                # Skip if we already have this candidate
-                if (v, x, y) in new_cands_set:
-                    continue
-                
-                if not feasible_on_occupancy(self.tiles[v], x, y, occ):
-                    continue
-                
-                # Compute overlap metrics
-                best_ov = 0
-                H_sum = 0
-                for u in self.placed_ids:
-                    ux, uy = self.placements[u]
-                    dx_u, dy_u = x - ux, y - uy
-                    for (dx0, dy0, ov) in self.pre_all.get((u, v), []):
-                        if dx0 == dx_u and dy0 == dy_u:
-                            if ov > best_ov:
-                                best_ov = ov
-                            H_sum += ov
-                            break
-                
-                filtered.append((v, x, y, False, best_ov, H_sum))
-                new_cands_set.add((v, x, y))
-        
-        return filtered
-
     def step(self, cand: Tuple[int, int, int, bool, int, int]):
         """
         Apply a candidate action to the environment.
@@ -472,21 +384,10 @@ def build_step_batch_from_env(
     raster_pad: int = 1,
     max_crop_hw: Optional[int] = None,
     device: Optional[torch.device | str] = None,
-    return_cands=False,
-    cached_cands: Optional[List[Tuple[int, int, int, bool, int, int]]] = None,
+    return_cands=False
 ) -> StepBatch:
     """
     Convert environment state into a StepBatch for neural network processing.
-    
-    Args:
-        env: The tile placement environment
-        tile_embs: Precomputed tile embeddings
-        raster_pad: Padding for rasterization
-        max_crop_hw: Maximum crop size
-        device: Device to place tensors on
-        return_cands: Whether to return raw candidates along with StepBatch
-        cached_cands: Optional pre-filtered candidates from previous step.
-                      If None, generate_candidates() will be called.
     """
     assert not env.done, "Episode already finished."
 
@@ -499,8 +400,7 @@ def build_step_batch_from_env(
     tiles_left = tile_embs[remaining].unsqueeze(0)  # (1, M, d_tile)
     tiles_left_mask = torch.ones(1, M, dtype=torch.bool)
 
-    # Use cached candidates if provided, otherwise generate from scratch
-    raw_cands = cached_cands if cached_cands is not None else env.generate_candidates()
+    raw_cands = env.generate_candidates()
     if len(raw_cands) == 0:
         sb = StepBatch(
             occ=occ,
