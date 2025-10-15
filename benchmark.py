@@ -133,9 +133,12 @@ def run_neural_solver(neural: NeuralBenchmarkContext, tiles, alphabet: int):
     )
     steps = 0
     status = "ok"
+    cached_cands = None  # Initialize candidate cache
 
     while not env.done and steps < neural.max_steps:
-        sb = build_step_batch_from_env(env, tile_embs, device=neural.device)
+        sb, raw_cands = build_step_batch_from_env(
+            env, tile_embs, device=neural.device, return_cands=True, cached_cands=cached_cands
+        )
         if not sb.cand_mask.any().item():
             status = "no_moves"
             break
@@ -160,11 +163,16 @@ def run_neural_solver(neural: NeuralBenchmarkContext, tiles, alphabet: int):
             probs = probs / norm
             action = int(torch.distributions.Categorical(probs.squeeze(0)).sample().item())
 
-        raw_cands = env.generate_candidates()
         if action >= len(raw_cands):
             status = "invalid_action"
             break
-        env.step(raw_cands[action])
+        
+        cand = raw_cands[action]
+        tile_id, x, y = cand[0], cand[1], cand[2]
+        env.step(cand)
+        
+        # Filter candidates for next iteration
+        cached_cands = env.filter_candidates_after_placement(raw_cands, tile_id, x, y)
         steps += 1
 
     if not env.done and status == "ok":

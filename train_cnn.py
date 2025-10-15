@@ -75,14 +75,21 @@ def model_pick_action(model: NeuralSolver, sb, device, temperature: float = 1.0,
 def evaluate_instance(model: NeuralSolver, env: TilePlacementEnv, tile_embs: torch.Tensor, device, temperature=0.7, greedy=True):
     env.reset()
     steps = 0
+    cached_cands = None  # Initialize candidate cache
+    
     while not env.done and steps < 10000:
-        sb = build_step_batch_from_env(env, tile_embs)
+        sb, raw_cands = build_step_batch_from_env(env, tile_embs, return_cands=True, cached_cands=cached_cands)
         if not sb.cand_mask.any():
             break
         a = model_pick_action(model, sb, device, temperature=temperature, argmax=greedy)
-        raw_cands = env.generate_candidates()
-        env.step(raw_cands[a])
+        cand = raw_cands[a]
+        tile_id, x, y = cand[0], cand[1], cand[2]
+        env.step(cand)
+        
+        # Filter candidates for next iteration
+        cached_cands = env.filter_candidates_after_placement(raw_cands, tile_id, x, y)
         steps += 1
+        
     m, _ = layout_bbox(env.placements, env.n)
     assert(env.done)
     return m, steps
@@ -127,11 +134,16 @@ def rollout_episode(
     build_batch_time = 0.0
     model_inference_time = 0.0
     env_step_time = 0.0
+    
+    # Initialize candidate cache
+    cached_cands = None
 
     while not env.done and steps < max_steps:
         # Time build step batch
         start_time = time.time()
-        sb, raw_cands = build_step_batch_from_env(env, tile_embs, return_cands=True)
+        sb, raw_cands = build_step_batch_from_env(
+            env, tile_embs, return_cands=True, cached_cands=cached_cands
+        )
         build_batch_time += time.time() - start_time
 
         if not sb.cand_mask.any():
@@ -164,7 +176,7 @@ def rollout_episode(
 
         a_idx = int(a.item())                         # one sync per step (env is Python)
         cand = raw_cands[a_idx]
-        x, y = cand[1], cand[2]                       # adjust indices to your cand structure
+        tile_id, x, y = cand[0], cand[1], cand[2]     # adjust indices to your cand structure
 
         # fast incremental reward (no layout_bbox scans)
         delta_inc = bbox_increase_if_place(x, y, env.n, env.bbox)
@@ -176,6 +188,12 @@ def rollout_episode(
         start_time = time.time()
         env.step(cand)
         env_step_time += time.time() - start_time
+        
+        # Filter candidates based on the tile we just placed
+        cached_cands = env.filter_candidates_after_placement(
+            raw_cands, tile_id, x, y
+        )
+        
         steps += 1
 
     final_m, _ = layout_bbox(env.placements, env.n)

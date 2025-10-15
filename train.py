@@ -55,14 +55,21 @@ def model_pick_action(model: NeuralSolver, sb, device, temperature: float = 1.0,
 def evaluate_instance(model: NeuralSolver, env: TilePlacementEnv, tile_embs: torch.Tensor, device, temperature=0.7, greedy=True):
     env.reset()
     steps = 0
+    cached_cands = None  # Initialize candidate cache
+    
     while not env.done and steps < 10000:
-        sb = build_step_batch_from_env(env, tile_embs)
+        sb, raw_cands = build_step_batch_from_env(env, tile_embs, return_cands=True, cached_cands=cached_cands)
         if not sb.cand_mask.any():
             break
         a = model_pick_action(model, sb, device, temperature=temperature, argmax=greedy)
-        raw_cands = env.generate_candidates()
-        env.step(raw_cands[a])
+        cand = raw_cands[a]
+        tile_id, x, y = cand[0], cand[1], cand[2]
+        env.step(cand)
+        
+        # Filter candidates for next iteration
+        cached_cands = env.filter_candidates_after_placement(raw_cands, tile_id, x, y)
         steps += 1
+        
     m, _ = layout_bbox(env.placements, env.n)
     assert(env.done)
     return m, steps
@@ -103,8 +110,14 @@ def rollout_episode(
     entropy_sum = torch.tensor(0.0, device=device)
     steps = 0
 
+    # Initialize candidates once at the start
+    cached_cands = None
+
     while not env.done and steps < max_steps:
-        sb, raw_cands = build_step_batch_from_env(env, tile_embs, return_cands=True)
+        # Use cached candidates or generate on first iteration
+        sb, raw_cands = build_step_batch_from_env(
+            env, tile_embs, return_cands=True, cached_cands=cached_cands
+        )
 
         if not sb.cand_mask.any():
             break
@@ -141,7 +154,15 @@ def rollout_episode(
         H_sum = float(sb.cand_feats[0, a_idx, 0].item())
         rewards.append(delta_m + overlap_bonus_coef * H_sum)
 
+        # Place the tile and filter candidates for next iteration
+        tile_id = cand[0]
         env.step(cand)
+        
+        # Filter candidates based on the tile we just placed
+        cached_cands = env.filter_candidates_after_placement(
+            raw_cands, tile_id, x, y
+        )
+        
         steps += 1
 
     final_m, _ = layout_bbox(env.placements, env.n)
