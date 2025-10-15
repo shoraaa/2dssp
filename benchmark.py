@@ -10,7 +10,7 @@ from pathlib import Path
 from aco import solve_with_aco, ACOParams
 
 try:
-    from greedy import greedy_place_once, GreedyParams
+    from greedy import greedy_place, GreedyParams
 except ImportError as e:
     raise
 
@@ -207,7 +207,7 @@ def run_once(data, ants, iters, K, compaction, seed, neural: Optional[NeuralBenc
     g_params = GreedyParams(K=K, rng_seed=seed, perimeter_search_limit=32)
     t1 = time.time()
     tiles_for_greedy = [tiles[i].copy() for i in range(tiles.shape[0])]
-    g_res = greedy_place_once(tiles_for_greedy, g_params)
+    g_res = greedy_place(tiles_for_greedy, g_params)
     g_time = time.time() - t1
     if g_res["status"] != "ok":
         return None

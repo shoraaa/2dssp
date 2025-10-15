@@ -299,17 +299,29 @@ class TilePlacementEnv:
 
                 cands.append((v, x, y, False, best_ov, H_sum))
 
-            # Adjacency-based (could be use to fill gaps)
-            adj_positions = set()
-            for u in self.placed_ids:
-                ux, uy = self.placements[u]
-                for (dx, dy) in self.adj_offs:
-                    adj_positions.add((ux + dx, uy + dy))
+            # Adjacency-based (could be use to fill gaps) if no overlap candidates
+            if len(cands) == 0:
+                adj_positions = set()
+                for u in self.placed_ids:
+                    ux, uy = self.placements[u]
+                    for (dx, dy) in self.adj_offs:
+                        adj_positions.add((ux + dx, uy + dy))
 
-            for (x, y) in adj_positions:
-                if not feasible_on_occupancy(self.tiles[v], x, y, occ):
-                    continue
-                cands.append((v, x, y, True, 0, 0))
+                for (x, y) in adj_positions:
+                    if not feasible_on_occupancy(self.tiles[v], x, y, occ):
+                        continue
+                    cands.append((v, x, y, True, 0, 0))
+            else: # only consider adjacency that not increase bbox
+                xmin, xmax, ymin, ymax = self.bbox
+                for u in self.placed_ids:
+                    ux, uy = self.placements[u]
+                    for (dx, dy) in self.adj_offs:
+                        x, y = ux + dx, uy + dy
+                        if x < xmin or x+n-1 > xmax or y < ymin or y+n-1 > ymax:
+                            continue
+                        if not feasible_on_occupancy(self.tiles[v], x, y, occ):
+                            continue
+                        cands.append((v, x, y, True, 0, 0))
 
         return cands
 

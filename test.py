@@ -17,9 +17,80 @@ from pathlib import Path
 from train import make_dataset, evaluate_instance
 from net import NeuralSolver, TileCNN
 from env import precompute_tile_embeddings, make_synthetic_tiles, TilePlacementEnv, layout_bbox
-from greedy import greedy_place_once, GreedyParams
+from greedy import greedy_place, GreedyParams
 from aco import solve_with_aco, ACOParams
 from exact import exact_bruteforce_min_canvas
+
+from pathlib import Path
+import torch
+
+def load_neural_model_cnn(
+    checkpoint_path: str,
+    alphabet: int,
+    device: torch.device,
+    d_tile: int = 64,
+    d_model: int = 128,
+    cand_feat_dim: int = 10,
+    strict: bool = True,
+):
+    """
+    Load NeuralSolver with an internal TileCNN (Option B).
+    Compatible with:
+      - NEW format: ckpt["model"] contains a unified state_dict (includes 'tile_cnn.*')
+      - OLD format: ckpt["model"] for policy + ckpt["tile_cnn"] for encoder
+      - RAW format: the ckpt itself is the model's state_dict
+    """
+    if not Path(checkpoint_path).exists():
+        raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
+
+    print(f"Loading neural model from {checkpoint_path}")
+    ckpt = torch.load(checkpoint_path, map_location=device)
+
+    # 1) Build modules (TileCNN as a submodule of NeuralSolver)
+    tile_cnn = TileCNN(in_ch=alphabet, d_tile=d_tile).to(device)
+    model = NeuralSolver(
+        c_occ=alphabet + 1,
+        d_tile=d_tile,
+        d_model=d_model,
+        cand_feat_dim=cand_feat_dim,
+        tile_cnn=tile_cnn,            # <— NEW: pass encoder in
+    ).to(device)
+
+    # 2) Figure out checkpoint layout and load
+    state_new = None
+    if isinstance(ckpt, dict) and "model" in ckpt:
+        state_new = ckpt["model"]
+    elif isinstance(ckpt, dict) and "state_dict" in ckpt:
+        state_new = ckpt["state_dict"]
+
+    if state_new is not None:
+        # NEW unified model or generic state_dict. Try direct load first.
+        try:
+            model.load_state_dict(state_new, strict=strict)
+        except RuntimeError as e:
+            # Backward-compat path: maybe 'tile_cnn' was saved separately.
+            if "tile_cnn" in ckpt:
+                print("[Compat] Loading policy part with strict=False, then tile_cnn from ckpt['tile_cnn'].")
+                model.load_state_dict(state_new, strict=False)
+                model.tile_cnn.load_state_dict(ckpt["tile_cnn"], strict=strict)
+            else:
+                # Re-raise if we can't resolve
+                raise e
+    else:
+        # RAW format: the whole ckpt is a state_dict
+        try:
+            model.load_state_dict(ckpt, strict=strict)
+        except RuntimeError as e:
+            # Last-chance compat: separate tile cnn keys present
+            if isinstance(ckpt, dict) and "tile_cnn" in ckpt and "model" in ckpt:
+                print("[Compat] RAW dict with separate parts; loading accordingly.")
+                model.load_state_dict(ckpt["model"], strict=False)
+                model.tile_cnn.load_state_dict(ckpt["tile_cnn"], strict=strict)
+            else:
+                raise e
+
+    model.eval()
+    return model  # tile encoder is model.tile_cnn
 
 
 def load_neural_model(checkpoint_path: str, alphabet: int, device: torch.device,
@@ -93,19 +164,20 @@ def test_neural_solver(model: NeuralSolver, tile_cnn: TileCNN, tiles: List[np.nd
 
 
 def test_greedy_solver(tiles: List[np.ndarray], seed: int = 42, K: int = 16, 
-                      perimeter_limit: int = 64, verbose: bool = False) -> Dict[str, Any]:
+                      perimeter_limit: int = 64, verbose: bool = False, 
+                      strategy: str = "min_bbox") -> Dict[str, Any]:
     """Test greedy solver on a set of tiles."""
-    params = GreedyParams(K=K, rng_seed=seed, perimeter_search_limit=perimeter_limit)
+    params = GreedyParams(K=K, rng_seed=seed, perimeter_search_limit=perimeter_limit, strategy=strategy)
     
     start_time = time.time()
-    result = greedy_place_once(tiles, params)
+    result = greedy_place(tiles, params)
     solve_time = time.time() - start_time
     
     if verbose:
-        print(f"Greedy Solver: m={result['best_m']}, time={solve_time:.3f}s")
+        print(f"Greedy Solver ({strategy}): m={result['best_m']}, time={solve_time:.3f}s")
     
     return {
-        "method": "Greedy",
+        "method": f"Greedy-{strategy}",
         "best_m": result["best_m"],
         "time": solve_time,
         "status": result["status"],

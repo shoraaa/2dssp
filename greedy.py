@@ -9,9 +9,10 @@ Placement = Dict[int, Tuple[int,int]]
 
 @dataclass
 class GreedyParams:
-    K: int = 16
+    K: int = 100
     rng_seed: Optional[int] = 0
     perimeter_search_limit: int = 64
+    strategy: str = "min_bbox"  # "max_overlap" or "min_bbox"
 
 class TopKEntry:
     __slots__ = ("dx", "dy", "ov")
@@ -154,3 +155,91 @@ def greedy_place_once(tiles: List[np.ndarray], params: GreedyParams) -> Dict[str
     for (X,Y),val in occ.items():
         canvas[Y - ymin, X - xmin] = val
     return {"status":"ok","order":order,"placements":placements,"best_m":m,"bbox":bbox,"canvas":canvas}
+
+def greedy_place_min_bbox(tiles: List[np.ndarray], params: GreedyParams) -> Dict[str,Any]:
+    """
+    Greedy placement algorithm that prioritizes minimal bounding box size increase,
+    with maximum overlap as a tie-breaker.
+    """
+    if params.rng_seed is not None:
+        random.seed(params.rng_seed); np.random.seed(params.rng_seed)
+    T=len(tiles); assert T>=1
+    n=tiles[0].shape[0]
+    topk, ov_lookup = compute_pairwise_topk(tiles, n, params.K)
+    order=list(range(T)); random.shuffle(order)
+    placements: Dict[int,Tuple[int,int]] = {}
+    occ: Dict[Coordinate,int]={}
+    root=order[0]; placements[root]=(0,0)
+    write_to_occupancy(tiles[root], 0, 0, occ)
+    bbox=[0,n-1,0,n-1]
+
+    def perimeter_candidates(v:int):
+        n_ = tiles[v].shape[0]
+        xmin,xmax,ymin,ymax = bbox
+        cands=[]
+        for pad in range(params.perimeter_search_limit):
+            y = ymin - n_ - pad
+            for x in range(xmin - n_ - pad, xmax + 1 + pad): cands.append((x,y))
+            x = xmin - n_ - pad
+            for y in range(ymin - n_ - pad + 1, ymax + 1 + pad): cands.append((x,y))
+            y = ymax + 1 + pad
+            for x in range(xmin - n_ - pad, xmax + 1 + pad): cands.append((x,y))
+            x = xmax + 1 + pad
+            for y in range(ymin - n_ - pad, ymax + 1 + pad): cands.append((x,y))
+            feasible=[(x,y) for (x,y) in cands if feasible_on_occupancy(tiles[v], x, y, occ)]
+            if feasible: return feasible
+        return []
+
+    for idx in range(1,T):
+        v=order[idx]
+        posset=set()
+        placed_ids=list(placements.keys())
+        for u in placed_ids:
+            ux,uy=placements[u]
+            for e in topk.get((u,v), []):
+                posset.add((ux+e.dx, uy+e.dy))
+        best=None
+        for (x,y) in posset:
+            if not feasible_on_occupancy(tiles[v], x, y, occ): continue
+            total_ov=0
+            for u in placed_ids:
+                ux,uy=placements[u]
+                dx=x-ux; dy=y-uy
+                total_ov += ov_lookup.get((u,v,dx,dy), 0)
+            new_m,_=bbox_after_place(x,y,n,bbox)
+            # Priority: minimal bbox increase, then maximum overlap
+            key=(-new_m, total_ov, random.random())
+            if best is None or key>best[0]:
+                best=(key,x,y)
+        if best is not None and best[0][1] > 0:  # check overlap (second element)
+            _,x,y = best
+        else:
+            fallback = perimeter_candidates(v)
+            if not fallback:
+                x,y = bbox[0]-n, bbox[2]-n
+            else:
+                bestp=None
+                for (px,py) in fallback:
+                    new_m,_=bbox_after_place(px,py,n,bbox)
+                    key=(-new_m, random.random())
+                    if bestp is None or key>bestp[0]: bestp=(key,px,py)
+                _,x,y = bestp
+        placements[v]=(x,y)
+        write_to_occupancy(tiles[v], x, y, occ)
+        _,bbox = bbox_after_place(x,y,n,bbox)
+    m,bbox = layout_bbox(placements, n)
+    xmin,xmax,ymin,ymax = bbox
+    W=xmax-xmin+1; H=ymax-ymin+1
+    canvas = np.full((H,W), -1, dtype=int)
+    for (X,Y),val in occ.items():
+        canvas[Y - ymin, X - xmin] = val
+    return {"status":"ok","order":order,"placements":placements,"best_m":m,"bbox":bbox,"canvas":canvas}
+
+def greedy_place(tiles: List[np.ndarray], params: GreedyParams) -> Dict[str,Any]:
+    """
+    Main greedy placement function that selects strategy based on params.
+    """
+    if params.strategy == "min_bbox":
+        return greedy_place_min_bbox(tiles, params)
+    else:  # default to "max_overlap"
+        return greedy_place_once(tiles, params)
